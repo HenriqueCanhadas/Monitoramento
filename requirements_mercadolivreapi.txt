@@ -1,0 +1,13 @@
+# Web Scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Selenium (Automação de navegador)
+selenium>=4.15.0
+
+# Parsing HTML alternativo (fallback do lxml)
+html5lib>=1.1
+
+# Utilitários
+python-dateutil>=2.8.2
