@@ -34,4 +34,4 @@ jobs:
         env:
           EMAIL_APP_P: ${{ secrets.EMAIL_APP_P }}
           SENHA_APP_P: ${{ secrets.SENHA_APP_P }}
-        run: xvfb-run python alerta_posts.py
+        run: xvfb-run python Posts_API.py
