@@ -1,0 +1,2 @@
+# Selenium (Automação de navegador)
+selenium>=4.15.0
