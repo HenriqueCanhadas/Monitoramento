@@ -181,196 +181,196 @@ class AutoLogin:
     # Substitua o método fazer_login() na classe AutoLogin por este:
 
     def fazer_login(self, url: str) -> bool:
-    """Executa processo completo de login"""
-    
-    try:
-        logger.info("🔐 Iniciando processo de login...")
+        """Executa processo completo de login"""
         
-        is_ci = os.environ.get('CI') == 'true' or os.environ.get('GITHUB_ACTIONS') == 'true'
-        
-        # Acessar página
-        logger.info("Acessando Mercado Livre...")
-        self.driver.get(url)
-        
-        if not is_ci:
-            self.driver.maximize_window()
-        
-        self.esperar_natural(2, 4)
-        
-        if is_ci:
-            try:
-                os.makedirs('debug_temp', exist_ok=True)
-                self.driver.save_screenshot('debug_temp/login_step1.png')
-                logger.info("📸 Screenshot salvo: login_step1.png")
-            except:
-                pass
-        
-        # Clicar em "Já tenho conta"
-        logger.info("Clicando em 'Já tenho conta'...")
         try:
-            ja_tenho_conta = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Já tenho conta')] | //span[contains(text(), 'Já tenho conta')]"))
-            )
-            ja_tenho_conta.click()
-        except Exception as e:
-            logger.warning(f"Botão 'Já tenho conta' não encontrado: {e}")
-        
-        self.esperar_natural(1, 2)
-        
-        if is_ci:
-            try:
-                self.driver.save_screenshot('debug_temp/login_step2.png')
-                logger.info("📸 Screenshot salvo: login_step2.png")
-            except:
-                pass
-        
-        # Inserir email
-        logger.info("Inserindo email...")
-        email_field = WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.ID, "user_id"))
-        )
-        email_field.clear()
-        
-        for char in self.email:
-            email_field.send_keys(char)
-            time.sleep(random.uniform(0.05, 0.15))
-        
-        self.esperar_natural(1, 2)
-        
-        if is_ci:
-            try:
-                self.driver.save_screenshot('debug_temp/login_step3.png')
-                logger.info("📸 Screenshot salvo: login_step3.png")
-            except:
-                pass
-        
-        # Clicar em "Continuar"
-        logger.info("Clicando em 'Continuar'...")
-        continuar_btn = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, "//button[@type='submit'] | //button[contains(text(), 'Continuar')]"))
-        )
-        continuar_btn.click()
-        self.esperar_natural(2, 4)
-        
-        if is_ci:
-            try:
-                self.driver.save_screenshot('debug_temp/login_step4.png')
-                with open('debug_temp/login_step4.html', 'w', encoding='utf-8') as f:
-                    f.write(self.driver.page_source)
-                logger.info("📸 Screenshot e HTML salvos: login_step4")
-            except:
-                pass
-        
-        # ===== CORREÇÃO PRINCIPAL: Múltiplas estratégias para solicitar código =====
-        logger.info("Solicitando código por email...")
-        
-        # Estratégia 1: Tentar múltiplos seletores
-        seletores_botao = [
-            "//button[contains(text(), 'Enviar código')]",
-            "//button[contains(text(), 'código')]",
-            "//button[contains(@class, 'andes-button')]",
-            "//*[@id='code_validation']//button",
-            "//button[@type='button']",
-            "//span[contains(text(), 'Enviar')]//ancestor::button",
-        ]
-        
-        botao_encontrado = False
-        
-        for idx, seletor in enumerate(seletores_botao, 1):
-            try:
-                logger.info(f"🔍 Tentando seletor {idx}/{len(seletores_botao)}: {seletor}")
-                enviar_codigo = WebDriverWait(self.driver, 5).until(
-                    EC.element_to_be_clickable((By.XPATH, seletor))
-                )
-                enviar_codigo.click()
-                logger.info(f"✅ Código solicitado (seletor {idx})!")
-                botao_encontrado = True
-                break
-            except:
-                continue
-        
-        # Estratégia 2: Tentar via JavaScript
-        if not botao_encontrado:
-            logger.warning("⚠️ Nenhum seletor funcionou, tentando JS...")
-            try:
-                # Buscar todos os botões
-                botoes = self.driver.find_elements(By.TAG_NAME, "button")
-                logger.info(f"🔍 Encontrados {len(botoes)} botões na página")
-                
-                # Tentar clicar em botões que possam ser o de código
-                for i, botao in enumerate(botoes):
-                    try:
-                        texto = botao.text.lower()
-                        if any(palavra in texto for palavra in ['código', 'enviar', 'email']):
-                            logger.info(f"🎯 Tentando botão {i+1}: '{botao.text[:50]}'")
-                            self.driver.execute_script("arguments[0].click();", botao)
-                            logger.info("✅ Código solicitado via JS!")
-                            botao_encontrado = True
-                            break
-                    except:
-                        continue
-            except Exception as e:
-                logger.error(f"Erro na estratégia JS: {e}")
-        
-        # Estratégia 3: Verificar se já está na tela de código
-        if not botao_encontrado:
-            logger.warning("⚠️ Botão não encontrado, verificando se já estamos na tela de código...")
-            try:
-                # Procurar campos de dígitos
-                campos_digitos = self.driver.find_elements(By.CSS_SELECTOR, 'input[aria-label*="Dígito"]')
-                if campos_digitos:
-                    logger.info("✅ Tela de código já está visível! Continuando...")
-                    botao_encontrado = True
-                else:
-                    logger.error("❌ Tela de código não encontrada")
-            except:
-                pass
-        
-        if not botao_encontrado:
-            logger.error("❌ Falha ao solicitar código por todas as estratégias")
+            logger.info("🔐 Iniciando processo de login...")
+            
+            is_ci = os.environ.get('CI') == 'true' or os.environ.get('GITHUB_ACTIONS') == 'true'
+            
+            # Acessar página
+            logger.info("Acessando Mercado Livre...")
+            self.driver.get(url)
+            
+            if not is_ci:
+                self.driver.maximize_window()
+            
+            self.esperar_natural(2, 4)
+            
             if is_ci:
                 try:
-                    self.driver.save_screenshot('debug_temp/login_error.png')
-                    with open('debug_temp/login_error.html', 'w', encoding='utf-8') as f:
-                        f.write(self.driver.page_source)
-                    logger.info("💾 Erro salvo: login_error.png e login_error.html")
+                    os.makedirs('debug_temp', exist_ok=True)
+                    self.driver.save_screenshot('debug_temp/login_step1.png')
+                    logger.info("📸 Screenshot salvo: login_step1.png")
                 except:
                     pass
-            return False
-        
-        self.esperar_natural(2, 3)
-        
-        if is_ci:
+                
+            # Clicar em "Já tenho conta"
+            logger.info("Clicando em 'Já tenho conta'...")
             try:
-                self.driver.save_screenshot('debug_temp/login_step5.png')
-                logger.info("📸 Screenshot salvo: login_step5.png")
-            except:
-                pass
-        
-        # Buscar código via IMAP
-        logger.info("📧 Buscando código no email...")
-        codigo = self.buscar_codigo_imap()
-        
-        if not codigo:
-            logger.error("❌ Código não encontrado no email")
+                ja_tenho_conta = WebDriverWait(self.driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Já tenho conta')] | //span[contains(text(), 'Já tenho conta')]"))
+                )
+                ja_tenho_conta.click()
+            except Exception as e:
+                logger.warning(f"Botão 'Já tenho conta' não encontrado: {e}")
+            
+            self.esperar_natural(1, 2)
+            
+            if is_ci:
+                try:
+                    self.driver.save_screenshot('debug_temp/login_step2.png')
+                    logger.info("📸 Screenshot salvo: login_step2.png")
+                except:
+                    pass
+                
+            # Inserir email
+            logger.info("Inserindo email...")
+            email_field = WebDriverWait(self.driver, 10).until(
+                EC.presence_of_element_located((By.ID, "user_id"))
+            )
+            email_field.clear()
+            
+            for char in self.email:
+                email_field.send_keys(char)
+                time.sleep(random.uniform(0.05, 0.15))
+            
+            self.esperar_natural(1, 2)
+            
+            if is_ci:
+                try:
+                    self.driver.save_screenshot('debug_temp/login_step3.png')
+                    logger.info("📸 Screenshot salvo: login_step3.png")
+                except:
+                    pass
+                
+            # Clicar em "Continuar"
+            logger.info("Clicando em 'Continuar'...")
+            continuar_btn = WebDriverWait(self.driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[@type='submit'] | //button[contains(text(), 'Continuar')]"))
+            )
+            continuar_btn.click()
+            self.esperar_natural(2, 4)
+            
+            if is_ci:
+                try:
+                    self.driver.save_screenshot('debug_temp/login_step4.png')
+                    with open('debug_temp/login_step4.html', 'w', encoding='utf-8') as f:
+                        f.write(self.driver.page_source)
+                    logger.info("📸 Screenshot e HTML salvos: login_step4")
+                except:
+                    pass
+                
+            # ===== CORREÇÃO PRINCIPAL: Múltiplas estratégias para solicitar código =====
+            logger.info("Solicitando código por email...")
+            
+            # Estratégia 1: Tentar múltiplos seletores
+            seletores_botao = [
+                "//button[contains(text(), 'Enviar código')]",
+                "//button[contains(text(), 'código')]",
+                "//button[contains(@class, 'andes-button')]",
+                "//*[@id='code_validation']//button",
+                "//button[@type='button']",
+                "//span[contains(text(), 'Enviar')]//ancestor::button",
+            ]
+            
+            botao_encontrado = False
+            
+            for idx, seletor in enumerate(seletores_botao, 1):
+                try:
+                    logger.info(f"🔍 Tentando seletor {idx}/{len(seletores_botao)}: {seletor}")
+                    enviar_codigo = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.XPATH, seletor))
+                    )
+                    enviar_codigo.click()
+                    logger.info(f"✅ Código solicitado (seletor {idx})!")
+                    botao_encontrado = True
+                    break
+                except:
+                    continue
+                
+            # Estratégia 2: Tentar via JavaScript
+            if not botao_encontrado:
+                logger.warning("⚠️ Nenhum seletor funcionou, tentando JS...")
+                try:
+                    # Buscar todos os botões
+                    botoes = self.driver.find_elements(By.TAG_NAME, "button")
+                    logger.info(f"🔍 Encontrados {len(botoes)} botões na página")
+                    
+                    # Tentar clicar em botões que possam ser o de código
+                    for i, botao in enumerate(botoes):
+                        try:
+                            texto = botao.text.lower()
+                            if any(palavra in texto for palavra in ['código', 'enviar', 'email']):
+                                logger.info(f"🎯 Tentando botão {i+1}: '{botao.text[:50]}'")
+                                self.driver.execute_script("arguments[0].click();", botao)
+                                logger.info("✅ Código solicitado via JS!")
+                                botao_encontrado = True
+                                break
+                        except:
+                            continue
+                except Exception as e:
+                    logger.error(f"Erro na estratégia JS: {e}")
+            
+            # Estratégia 3: Verificar se já está na tela de código
+            if not botao_encontrado:
+                logger.warning("⚠️ Botão não encontrado, verificando se já estamos na tela de código...")
+                try:
+                    # Procurar campos de dígitos
+                    campos_digitos = self.driver.find_elements(By.CSS_SELECTOR, 'input[aria-label*="Dígito"]')
+                    if campos_digitos:
+                        logger.info("✅ Tela de código já está visível! Continuando...")
+                        botao_encontrado = True
+                    else:
+                        logger.error("❌ Tela de código não encontrada")
+                except:
+                    pass
+                
+            if not botao_encontrado:
+                logger.error("❌ Falha ao solicitar código por todas as estratégias")
+                if is_ci:
+                    try:
+                        self.driver.save_screenshot('debug_temp/login_error.png')
+                        with open('debug_temp/login_error.html', 'w', encoding='utf-8') as f:
+                            f.write(self.driver.page_source)
+                        logger.info("💾 Erro salvo: login_error.png e login_error.html")
+                    except:
+                        pass
+                return False
+            
+            self.esperar_natural(2, 3)
+            
+            if is_ci:
+                try:
+                    self.driver.save_screenshot('debug_temp/login_step5.png')
+                    logger.info("📸 Screenshot salvo: login_step5.png")
+                except:
+                    pass
+                
+            # Buscar código via IMAP
+            logger.info("📧 Buscando código no email...")
+            codigo = self.buscar_codigo_imap()
+            
+            if not codigo:
+                logger.error("❌ Código não encontrado no email")
+                return False
+            
+            logger.info(f"🎯 Código encontrado: {codigo}")
+            
+            # Inserir código
+            if not self.inserir_codigo(codigo):
+                return False
+            
+            logger.info("✅ Login concluído com sucesso!")
+            self.esperar_natural(3, 5)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Erro no login: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
-        
-        logger.info(f"🎯 Código encontrado: {codigo}")
-        
-        # Inserir código
-        if not self.inserir_codigo(codigo):
-            return False
-        
-        logger.info("✅ Login concluído com sucesso!")
-        self.esperar_natural(3, 5)
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Erro no login: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
-        return False
     
     def buscar_codigo_imap(self) -> Optional[str]:
         """Busca código de verificação via IMAP"""
