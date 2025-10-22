@@ -30,6 +30,9 @@ jobs:
       - name: Instalar xvfb
         run: sudo apt-get update && sudo apt-get install -y xvfb
       
+      - name: Criar diretório de debug
+        run: mkdir -p debug_temp
+      
       - name: Rodar monitoramento
         env:
           EMAIL_APP_M: ${{ secrets.EMAIL_APP_M }}
@@ -38,10 +41,11 @@ jobs:
           SENHA_APP_P: ${{ secrets.SENHA_APP_P }}
         run: xvfb-run python Mercado_Livre_API.py
       
-      - name: Upload de logs de debug (se houver falha)
-        if: failure()
+      # SEMPRE fazer upload dos logs (sucesso ou falha)
+      - name: Upload de logs e screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-logs
+          name: debug-logs-${{ github.run_number }}
           path: debug_temp/
-          retention-days: 3
+          retention-days: 7
