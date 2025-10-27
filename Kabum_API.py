@@ -394,10 +394,6 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
                 border-radius: 12px;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.08);
                 transition: transform 0.2s ease;
-                min-height: 160px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
             }}
             .summary-item:hover {{
                 transform: translateY(-2px);
