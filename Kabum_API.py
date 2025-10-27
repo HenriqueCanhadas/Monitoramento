@@ -41,7 +41,7 @@ except Exception as e:
 # Destinatários (usa o mesmo email do remetente)
 DESTINATARIOS = [EMAIL_REMETENTE]
 
-# Produtos a monitorar
+# Produtos a monitorar (LISTA COMPLETA - 14 produtos)
 PRODUTOS = [
     {
         "product_key": "kabum-1",
@@ -78,6 +78,41 @@ PRODUTOS = [
         "url": "https://www.kabum.com.br/produto/875817/console-sony-playstation-5-slim-com-leitor-de-discos-ssd-1tb-controle-sem-fio-dualsense-2-jogos-1000038858",
         "preco_estimado": 3300.00
     },
+    {
+        "product_key": "kabum-8",
+        "url": "https://www.kabum.com.br/produto/922661/console-sony-playstation-5-com-leitor-de-discos-ssd-1tb-controle-sem-fio-dualsense-2-jogos-1000050613",
+        "preco_estimado": 3300.00
+    },
+    {
+        "product_key": "kabum-9",
+        "url": "https://www.kabum.com.br/produto/316365/cartao-de-memoria-sandisk-ultra-microsd-uhs-i-128gb-100mb-s-com-adaptador-sdsqunr-128g-gn3ma",
+        "preco_estimado": 55.00
+    },
+    {
+        "product_key": "kabum-10",
+        "url": "https://www.kabum.com.br/produto/111807/cartao-de-memoria-kingston-microsd-de-128gb-canvas-select-plus-100mb-s-classe-10-com-adaptador-sd-sdcs2-128gb",
+        "preco_estimado": 55.00
+    },
+    {
+        "product_key": "kabum-11",
+        "url": "https://www.kabum.com.br/produto/728163/cartao-de-memoria-sandisk-creator-series-microsd-128gb-classe-10-leitura-190-mb-s-e-gravacao-90-mb-s-sdsqxaa-128g-gn6ms",
+        "preco_estimado": 130.00
+    },
+    {
+        "product_key": "kabum-12",
+        "url": "https://www.kabum.com.br/produto/728162/cartao-de-memoria-sandisk-creator-series-microsd-256gb-classe-10-leitura-190-mb-s-e-gravacao-130-mb-s-sdsqxav-256g-gn6ms",
+        "preco_estimado": 200.00
+    },
+    {
+        "product_key": "kabum-13",
+        "url": "https://www.kabum.com.br/produto/111808/cartao-de-memoria-kingston-microsd-de-256gb-canvas-select-plus-100mb-s-classe-10-com-adaptador-sd-sdcs2-256gb",
+        "preco_estimado": 120.00
+    },
+    {
+        "product_key": "kabum-14",
+        "url": "https://www.kabum.com.br/produto/728161/cartao-de-memoria-sandisk-creator-series-microsd-512gb-classe-10-leitura-190-mb-s-e-gravacao-130-mb-s-sdsqxav-512g-gn6ms",
+        "preco_estimado": 330.00
+    },
 ]
 
 # ========================================
@@ -94,7 +129,6 @@ def obter_horario_brasilia():
 def obter_horario_brasilia_iso():
     """Retorna o horário atual de Brasília em formato compatível com PostgreSQL (sem timezone)"""
     try:
-        # Retorna no formato YYYY-MM-DD HH:MM:SS.ffffff (sem timezone)
         return datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%Y-%m-%d %H:%M:%S.%f")
     except:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
@@ -102,11 +136,8 @@ def obter_horario_brasilia_iso():
 def converter_utc_para_brasilia(data_utc_str):
     """Converte data UTC do banco para horário de Brasília formatado"""
     try:
-        # Parse da data UTC
         data_utc = datetime.fromisoformat(data_utc_str.replace('Z', '+00:00'))
-        # Converte para Brasília
         data_brasilia = data_utc.astimezone(ZoneInfo("America/Sao_Paulo"))
-        # Retorna formatado
         return data_brasilia.strftime("%d/%m/%Y %H:%M:%S")
     except:
         return data_utc_str
@@ -171,11 +202,9 @@ def verificar_status_produto(driver):
             elemento = driver.find_element(By.XPATH, xpath)
             texto = elemento.text.strip()
             
-            # Verifica se está esgotado
             if 'Ops! Produto esgotado' in texto or 'esgotado' in texto.lower():
                 return ("esgotado", "Ops! Produto esgotado")
             
-            # Tenta encontrar preço no h4
             try:
                 h4_element = elemento.find_element(By.TAG_NAME, 'h4')
                 preco_texto = h4_element.text.strip()
@@ -185,7 +214,6 @@ def verificar_status_produto(driver):
             except:
                 pass
             
-            # Tenta no texto geral
             preco = extrair_preco(texto)
             if preco:
                 return ("disponivel", preco)
@@ -215,7 +243,6 @@ def salvar_no_supabase(produtos_info):
     """Salva dados no Supabase - Tabela de Monitoramento (histórico completo)"""
     try:
         for produto in produtos_info:
-            # Determina preço atual
             if produto["tipo"] == "disponivel":
                 preco_atual = extrair_valor_numerico(produto["status"])
             elif produto["tipo"] == "esgotado":
@@ -223,20 +250,17 @@ def salvar_no_supabase(produtos_info):
             else:
                 preco_atual = None
             
-            # Obtém horário de Brasília em formato ISO para o banco
             data_coleta_iso = obter_horario_brasilia_iso()
             
-            # Prepara dados
             data = {
                 "product_key": produto["product_key"],
                 "nome": produto["nome"],
                 "url": produto["url"],
                 "preco_atual": preco_atual,
                 "status": produto["tipo"],
-                "data_coleta": data_coleta_iso  # Formato ISO 8601
+                "data_coleta": data_coleta_iso
             }
             
-            # Insere no banco
             supabase.table("Monitoramento Kabum").insert(data).execute()
         
         print("✅ Dados salvos no Supabase (Monitoramento Kabum) com sucesso!")
@@ -248,55 +272,44 @@ def salvar_no_supabase(produtos_info):
 def atualizar_menores_precos(produtos_info):
     """
     Atualiza a tabela Menores Preços Kabum apenas com os menores preços históricos.
-    - Adiciona produto se não existir
-    - Atualiza se encontrar preço menor
-    - Ignora preços 0.00
     """
     try:
         for produto in produtos_info:
-            # Determina preço atual
             if produto["tipo"] == "disponivel":
                 preco_atual = extrair_valor_numerico(produto["status"])
             else:
                 preco_atual = None
             
-            # Ignora se preço for 0.00 ou None
             if preco_atual is None or preco_atual == 0.00:
                 continue
             
             product_key = produto["product_key"]
             
-            # Busca se o produto já existe na tabela de menores preços
             response = supabase.table("Menores Preços Kabum") \
                 .select("*") \
                 .eq("product_key", product_key) \
                 .execute()
             
-            # Obtém horário de Brasília em formato ISO para o banco
             data_coleta_iso = obter_horario_brasilia_iso()
             
-            # Prepara dados base
             dados_produto = {
                 "product_key": product_key,
                 "nome": produto["nome"],
                 "url": produto["url"],
                 "preco_atual": preco_atual,
                 "status": "disponivel",
-                "data_coleta": data_coleta_iso  # Formato ISO 8601
+                "data_coleta": data_coleta_iso
             }
             
             if len(response.data) == 0:
-                # Produto não existe - INSERIR
                 supabase.table("Menores Preços Kabum").insert(dados_produto).execute()
                 print(f"   ➕ {product_key}: Adicionado com preço {formatar_preco_brasileiro(preco_atual)}")
                 
             else:
-                # Produto existe - VERIFICAR se preço é menor
                 registro_existente = response.data[0]
                 preco_existente = registro_existente.get("preco_atual")
                 
                 if preco_existente is None or preco_atual < preco_existente:
-                    # Preço atual é menor - ATUALIZAR
                     supabase.table("Menores Preços Kabum") \
                         .update(dados_produto) \
                         .eq("product_key", product_key) \
@@ -309,8 +322,7 @@ def atualizar_menores_precos(produtos_info):
                         economia_percent = (economia / preco_existente) * 100
                         print(f"   📉 {product_key}: MENOR PREÇO! {formatar_preco_brasileiro(preco_existente)} → {formatar_preco_brasileiro(preco_atual)} (economiza {formatar_preco_brasileiro(economia)} | -{economia_percent:.1f}%)")
                 else:
-                    # Preço atual é maior ou igual - NÃO ATUALIZAR
-                    print(f"   ⏸️  {product_key}: Mantido {formatar_preco_brasileiro(preco_existente)} (atual: {formatar_preco_brasileiro(preco_atual)})")
+                    print(f"   ⏸️ {product_key}: Mantido {formatar_preco_brasileiro(preco_existente)} (atual: {formatar_preco_brasileiro(preco_atual)})")
         
         print("\n✅ Tabela 'Menores Preços Kabum' atualizada com sucesso!")
         return True
@@ -363,30 +375,65 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
                 opacity: 0.9;
             }}
             .summary {{
-                display: flex;
-                justify-content: space-around;
-                padding: 25px;
+                padding: 30px;
                 background-color: #f8f9fa;
                 border-bottom: 3px solid #e9ecef;
             }}
+            .summary-table {{
+                width: 100%;
+                border-collapse: separate;
+                border-spacing: 20px;
+            }}
+            .summary-table td {{
+                width: 33.33%;
+                vertical-align: top;
+            }}
             .summary-item {{
                 text-align: center;
-                padding: 15px;
+                padding: 25px;
+                border-radius: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                transition: transform 0.2s ease;
+                min-height: 160px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+            }}
+            .summary-item:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+            }}
+            .summary-item.disponivel-card {{
+                background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+                border: 2px solid #28a745;
+            }}
+            .summary-item.esgotado-card {{
+                background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+                border: 2px solid #dc3545;
+            }}
+            .summary-item.erro-card {{
+                background: linear-gradient(135deg, #fff3cd 0%, #ffe8a1 100%);
+                border: 2px solid #ffc107;
+            }}
+            .summary-item .icon {{
+                font-size: 32px;
+                margin-bottom: 10px;
             }}
             .summary-item .number {{
-                font-size: 36px;
+                font-size: 48px;
                 font-weight: bold;
-                margin-bottom: 5px;
-            }}
-            .summary-item .label {{
-                font-size: 14px;
-                color: #6c757d;
-                text-transform: uppercase;
-                letter-spacing: 1px;
+                margin-bottom: 8px;
+                line-height: 1;
             }}
             .disponivel {{ color: #28a745; }}
             .esgotado {{ color: #dc3545; }}
             .erro {{ color: #ffc107; }}
+            .summary-item .label {{
+                font-size: 14px;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 1.2px;
+            }}
             .table-container {{
                 padding: 30px;
                 overflow-x: auto;
@@ -402,12 +449,15 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
             }}
             th {{
                 padding: 15px 10px;
-                text-align: left;
+                text-align: center;
                 font-weight: 600;
                 font-size: 13px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
                 white-space: nowrap;
+            }}
+            th:nth-child(2) {{
+                text-align: left;
             }}
             tbody tr {{
                 border-bottom: 1px solid #e9ecef;
@@ -418,6 +468,10 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
             td {{
                 padding: 15px 10px;
                 font-size: 14px;
+                text-align: center;
+            }}
+            td:nth-child(2) {{
+                text-align: left;
             }}
             .produto-nome {{
                 font-weight: 500;
@@ -459,9 +513,9 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
             }}
             .diferenca {{
                 display: inline-block;
-                padding: 4px 8px;
-                border-radius: 12px;
-                font-size: 11px;
+                padding: 6px 12px;
+                border-radius: 20px;
+                font-size: 12px;
                 font-weight: 600;
                 white-space: nowrap;
             }}
@@ -478,15 +532,21 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
                 color: #383d41;
             }}
             .link {{
+                display: inline-block;
+                padding: 6px 12px;
+                border-radius: 20px;
+                background-color: #f8f9fa;
+                border: 1px solid #667eea;
                 color: #667eea;
                 text-decoration: none;
                 font-size: 12px;
-                transition: color 0.3s ease;
+                font-weight: 600;
+                transition: all 0.3s ease;
                 white-space: nowrap;
             }}
             .link:hover {{
-                color: #764ba2;
-                text-decoration: underline;
+                background-color: #667eea;
+                color: white;
             }}
             .footer {{
                 background-color: #f8f9fa;
@@ -499,14 +559,19 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
             .index {{
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
-                width: 30px;
-                height: 30px;
+                width: 42px;
+                height: 42px;
                 border-radius: 50%;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
+                display: inline-block;
+                text-align: center;
+                line-height: 42px;
                 font-weight: bold;
-                font-size: 12px;
+                font-size: 16px;
+                box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+            }}
+            .index-cell {{
+                text-align: center;
+                vertical-align: middle;
             }}
         </style>
     </head>
@@ -514,35 +579,48 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
         <div class="container">
             <div class="header">
                 <h1>🔍 Relatório de Verificação - KaBuM!</h1>
-                <p>Verificação realizada em {agora}</p>
+                <p>📅 Verificação realizada em {agora}</p>
             </div>
             
             <div class="summary">
-                <div class="summary-item">
-                    <div class="number disponivel">{disponiveis}</div>
-                    <div class="label">Disponíveis</div>
-                </div>
-                <div class="summary-item">
-                    <div class="number esgotado">{esgotados}</div>
-                    <div class="label">Esgotados</div>
-                </div>
-                <div class="summary-item">
-                    <div class="number erro">{erros}</div>
-                    <div class="label">Erros</div>
-                </div>
+                <table class="summary-table" role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                        <td>
+                            <div class="summary-item disponivel-card">
+                                <div class="icon">✅</div>
+                                <div class="number disponivel">{disponiveis}</div>
+                                <div class="label">Disponíveis</div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="summary-item esgotado-card">
+                                <div class="icon">✗</div>
+                                <div class="number esgotado">{esgotados}</div>
+                                <div class="label">Esgotados</div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="summary-item erro-card">
+                                <div class="icon">⚠</div>
+                                <div class="number erro">{erros}</div>
+                                <div class="label">Erros</div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
             </div>
             
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>#</th>
-                            <th>Produto</th>
-                            <th>Status</th>
-                            <th>Preço Atual</th>
-                            <th>Preço Estimado</th>
-                            <th>Diferença</th>
-                            <th>Link</th>
+                            <th>ÍNDICE</th>
+                            <th>PRODUTO</th>
+                            <th>STATUS</th>
+                            <th>PREÇO ATUAL</th>
+                            <th>PREÇO ESTIMADO</th>
+                            <th>DIFERENÇA</th>
+                            <th>AÇÃO</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -567,10 +645,10 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
             if diferenca is not None:
                 if diferenca > 0:
                     diferenca_class = "negativa"
-                    diferenca_display = f'<span class="diferenca {diferenca_class}">+{diferenca:.1f}%</span>'
+                    diferenca_display = f'<span class="diferenca {diferenca_class}">📈 +{diferenca:.1f}%</span>'
                 elif diferenca < 0:
                     diferenca_class = "positiva"
-                    diferenca_display = f'<span class="diferenca {diferenca_class}">{diferenca:.1f}%</span>'
+                    diferenca_display = f'<span class="diferenca {diferenca_class}">📉 {diferenca:.1f}%</span>'
                 else:
                     diferenca_class = "neutro"
                     diferenca_display = f'<span class="diferenca {diferenca_class}">0%</span>'
@@ -588,13 +666,13 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
         
         html += f"""
                         <tr>
-                            <td><span class="index">{i}</span></td>
+                            <td class="index-cell"><span class="index">{i}</span></td>
                             <td class="produto-nome">{nome}</td>
                             <td><span class="status {status_class}">{status_display}</span></td>
                             <td>{preco_display}</td>
                             <td><span class="preco-estimado">{preco_estimado_display}</span></td>
                             <td>{diferenca_display}</td>
-                            <td><a href="{url}" class="link" target="_blank">Ver produto</a></td>
+                            <td><a href="{url}" class="link" target="_blank">🛒 Ver</a></td>
                         </tr>
         """
     
@@ -644,7 +722,7 @@ def imprimir_cabecalho(agora):
     print("\n" + "="*120)
     print("🔍 MONITOR DE PREÇOS KABUM".center(120))
     print("="*120)
-    print(f"⏰ Verificação iniciada em: {agora}")
+    print(f"⏰ 📅 Verificação iniciada em: {agora}")
     print(f"📧 Email: {EMAIL_REMETENTE}")
     print(f"🌐 Ambiente: {'CI/CD' if os.environ.get('CI') else 'Local'}")
     print("="*120 + "\n")
@@ -662,9 +740,9 @@ def imprimir_resultado(index, total, produto, status, preco_estimado, url):
             diferenca = calcular_diferenca_preco(preco_atual_num, preco_estimado)
             if diferenca is not None:
                 if diferenca > 0:
-                    print(f"      Diferença: +{diferenca:.1f}% (mais caro)")
+                    print(f"      Diferença: 📈 +{diferenca:.1f}% (mais caro)")
                 elif diferenca < 0:
-                    print(f"      Diferença: {diferenca:.1f}% (mais barato) 🎉")
+                    print(f"      Diferença: 📉 {diferenca:.1f}% (mais barato) 🎉")
                 else:
                     print(f"      Diferença: 0% (igual)")
     
@@ -678,7 +756,7 @@ def imprimir_rodape(disponiveis, esgotados, erros):
     print("="*120)
     print(f"✅ Produtos disponíveis: {disponiveis}")
     print(f"❌ Produtos esgotados: {esgotados}")
-    print(f"⚠️  Erros ao verificar: {erros}")
+    print(f"⚠️ Erros ao verificar: {erros}")
     print("="*120 + "\n")
 
 # ========================================
@@ -688,6 +766,7 @@ def imprimir_rodape(disponiveis, esgotados, erros):
 def main():
     """Função principal do monitor"""
     agora = obter_horario_brasilia()
+    print("Horário de Brasília:", agora)
     
     # Inicializa variáveis
     produtos_disponiveis = 0
@@ -726,7 +805,7 @@ def main():
                     status_display = "❌ Ops! Produto esgotado"
                 else:
                     erros += 1
-                    status_display = "⚠️  Não foi possível verificar"
+                    status_display = "⚠️ Não foi possível verificar"
                 
                 # Formata nome
                 nome_produto = formatar_nome_produto(url)
@@ -746,7 +825,7 @@ def main():
                 
             except Exception as e:
                 nome_produto = formatar_nome_produto(url)
-                status_display = "⚠️  Erro ao processar"
+                status_display = "⚠️ Erro ao processar"
                 imprimir_resultado(index, total_urls, nome_produto, status_display, preco_estimado, url)
                 erros += 1
                 
