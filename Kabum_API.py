@@ -590,7 +590,7 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
                         </td>
                         <td>
                             <div class="summary-item esgotado-card">
-                                <div class="icon">✗</div>
+                                <div class="icon">❌</div>
                                 <div class="number esgotado">{esgotados}</div>
                                 <div class="label">Esgotados</div>
                             </div>
