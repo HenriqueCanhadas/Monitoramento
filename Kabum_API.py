@@ -188,6 +188,22 @@ def formatar_preco_brasileiro(valor):
     """Formata valor numérico para padrão brasileiro"""
     return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
+def obter_menor_preco_historico(product_key):
+    """Busca o menor preço histórico do banco de dados"""
+    try:
+        response = supabase.table("Menores Preços Kabum") \
+            .select("preco_atual") \
+            .eq("product_key", product_key) \
+            .execute()
+        
+        if response.data and len(response.data) > 0:
+            preco = response.data[0].get('preco_atual')
+            return preco if preco is not None else None
+        return None
+    except Exception as e:
+        print(f"⚠️ Erro ao buscar menor preço para {product_key}: {str(e)}")
+        return None
+
 # ========================================
 # FUNÇÕES DE SCRAPING
 # ========================================
@@ -501,6 +517,12 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
                 color: #28a745;
                 white-space: nowrap;
             }}
+            .preco-menor {{
+                font-size: 16px;
+                font-weight: bold;
+                color: #007bff;
+                white-space: nowrap;
+            }}
             .preco-estimado {{
                 font-size: 14px;
                 font-weight: 500;
@@ -614,6 +636,7 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
                             <th>PRODUTO</th>
                             <th>STATUS</th>
                             <th>PREÇO ATUAL</th>
+                            <th>MENOR PREÇO</th>
                             <th>PREÇO ESTIMADO</th>
                             <th>DIFERENÇA</th>
                             <th>AÇÃO</th>
@@ -628,7 +651,15 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
         status = produto['status']
         url = produto['url']
         preco_estimado = produto.get('preco_estimado', 0)
+        menor_preco = produto.get('menor_preco', None)
+        
         preco_estimado_display = formatar_preco_brasileiro(preco_estimado)
+        
+        # Formata menor preço
+        if menor_preco is not None and menor_preco > 0:
+            menor_preco_display = f'<span class="preco-menor">{formatar_preco_brasileiro(menor_preco)}</span>'
+        else:
+            menor_preco_display = '<span style="color: #6c757d;">—</span>'
         
         status_class = tipo
         if tipo == "disponivel":
@@ -666,6 +697,7 @@ def criar_html_email(produtos_info, disponiveis, esgotados, erros, agora):
                             <td class="produto-nome">{nome}</td>
                             <td><span class="status {status_class}">{status_display}</span></td>
                             <td>{preco_display}</td>
+                            <td>{menor_preco_display}</td>
                             <td><span class="preco-estimado">{preco_estimado_display}</span></td>
                             <td>{diferenca_display}</td>
                             <td><a href="{url}" class="link" target="_blank">🛒 Ver</a></td>
@@ -723,11 +755,17 @@ def imprimir_cabecalho(agora):
     print(f"🌐 Ambiente: {'CI/CD' if os.environ.get('CI') else 'Local'}")
     print("="*120 + "\n")
 
-def imprimir_resultado(index, total, produto, status, preco_estimado, url):
+def imprimir_resultado(index, total, produto, status, preco_estimado, menor_preco, url):
     """Imprime resultado de cada produto"""
     print(f"[{index}/{total}] {produto}")
     print(f"      Status: {status}")
     print(f"      Preço Estimado: {formatar_preco_brasileiro(preco_estimado)}")
+    
+    # Exibe menor preço histórico
+    if menor_preco is not None and menor_preco > 0:
+        print(f"      Menor Preço Histórico: 🏆 {formatar_preco_brasileiro(menor_preco)}")
+    else:
+        print(f"      Menor Preço Histórico: Não disponível")
     
     if "💰 R$" in status:
         preco_atual_texto = status.replace("💰 ", "")
@@ -792,6 +830,9 @@ def main():
                 # Verifica status
                 tipo, status = verificar_status_produto(driver)
                 
+                # Busca menor preço histórico
+                menor_preco_historico = obter_menor_preco_historico(product_key)
+                
                 # Contabiliza
                 if tipo == "disponivel":
                     produtos_disponiveis += 1
@@ -813,16 +854,21 @@ def main():
                     'tipo': tipo,
                     'status': status,
                     'url': url,
-                    'preco_estimado': preco_estimado
+                    'preco_estimado': preco_estimado,
+                    'menor_preco': menor_preco_historico
                 })
                 
                 # Imprime resultado
-                imprimir_resultado(index, total_urls, nome_produto, status_display, preco_estimado, url)
+                imprimir_resultado(index, total_urls, nome_produto, status_display, preco_estimado, menor_preco_historico, url)
                 
             except Exception as e:
                 nome_produto = formatar_nome_produto(url)
                 status_display = "⚠️ Erro ao processar"
-                imprimir_resultado(index, total_urls, nome_produto, status_display, preco_estimado, url)
+                
+                # Busca menor preço mesmo em caso de erro
+                menor_preco_historico = obter_menor_preco_historico(product_key)
+                
+                imprimir_resultado(index, total_urls, nome_produto, status_display, preco_estimado, menor_preco_historico, url)
                 erros += 1
                 
                 produtos_info.append({
@@ -831,7 +877,8 @@ def main():
                     'tipo': 'erro',
                     'status': 'Erro ao verificar',
                     'url': url,
-                    'preco_estimado': preco_estimado
+                    'preco_estimado': preco_estimado,
+                    'menor_preco': menor_preco_historico
                 })
     
     finally:
