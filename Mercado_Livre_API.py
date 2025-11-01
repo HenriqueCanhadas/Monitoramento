@@ -1,7 +1,7 @@
 """
 ╔═══════════════════════════════════════════════════════════════════════════════╗
 ║  MONITOR DE PREÇOS - MINIATURAS F1 1/43 McDONALD'S - MERCADO LIVRE          ║
-║  Versão: 4.0 - Sistema Unificado com Auto-Login                             ║
+║  Versão: 4.0 - Sistema Unificado com Auto-Login + Email Moderno             ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 """
 
@@ -17,7 +17,7 @@ import random
 import re
 import json
 import logging
-import sys  # ← ADICIONADO
+import sys
 from typing import List, Dict, Optional
 from urllib.parse import quote_plus, urljoin, urlparse
 
@@ -248,7 +248,7 @@ class AutoLogin:
             continuar_btn.click()
             self.esperar_natural(2, 4)
             
-            # SEMPRE salvar screenshot e HTML do step4 (CORREÇÃO 1)
+            # SEMPRE salvar screenshot e HTML do step4
             try:
                 os.makedirs('debug_temp', exist_ok=True)
                 self.driver.save_screenshot('debug_temp/login_step4.png')
@@ -258,7 +258,7 @@ class AutoLogin:
             except Exception as e:
                 logger.warning(f"⚠️ Erro ao salvar debug step4: {e}")
             
-            # ===== CORREÇÃO PRINCIPAL: Múltiplas estratégias para solicitar código =====
+            # ===== Múltiplas estratégias para solicitar código =====
             logger.info("Solicitando código por email...")
             
             # Estratégia 1: Tentar múltiplos seletores
@@ -290,11 +290,9 @@ class AutoLogin:
             if not botao_encontrado:
                 logger.warning("⚠️ Nenhum seletor funcionou, tentando JS...")
                 try:
-                    # Buscar todos os botões
                     botoes = self.driver.find_elements(By.TAG_NAME, "button")
                     logger.info(f"🔍 Encontrados {len(botoes)} botões na página")
                     
-                    # Tentar clicar em botões que possam ser o de código
                     for i, botao in enumerate(botoes):
                         try:
                             texto = botao.text.lower()
@@ -313,7 +311,6 @@ class AutoLogin:
             if not botao_encontrado:
                 logger.warning("⚠️ Botão não encontrado, verificando se já estamos na tela de código...")
                 try:
-                    # Procurar campos de dígitos
                     campos_digitos = self.driver.find_elements(By.CSS_SELECTOR, 'input[aria-label*="Dígito"]')
                     if campos_digitos:
                         logger.info("✅ Tela de código já está visível! Continuando...")
@@ -333,7 +330,190 @@ class AutoLogin:
                     logger.info("💾 Erro salvo: login_error.png e login_error.html")
                 except:
                     pass
-                return False
+        
+# ═══════════════════════════════════════════════════════════════════════════════
+# FUNÇÃO PRINCIPAL
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def main():
+    """Função principal"""
+    
+    print("\n" + "╔" + "═"*98 + "╗")
+    print("║" + "  🏎️  MONITOR DE PREÇOS F1 1/43 McDONALD'S".center(100) + "║")
+    print("║" + "  Mercado Livre Brasil - v4.0 (Auto-Login)".center(100) + "║")
+    print("╚" + "═"*98 + "╝\n")
+    
+    is_ci = os.environ.get('CI') == 'true' or os.environ.get('GITHUB_ACTIONS') == 'true'
+    if is_ci:
+        logger.info("🤖 Executando em ambiente CI/CD (GitHub Actions)")
+        os.makedirs('debug_temp', exist_ok=True)
+    
+    logger.info("Iniciando Monitor de Preços v4.0")
+    
+    inicio_execucao = time.time()
+    
+    try:
+        scraper = MercadoLivreScraper()
+        produtos = buscar_produtos(scraper)
+        
+        produtos_unicos = {}
+        for p in produtos:
+            if p['ID'] not in produtos_unicos:
+                produtos_unicos[p['ID']] = p
+        
+        produtos = list(produtos_unicos.values())
+        
+        stats = scraper.get_stats()
+        logger.info("")
+        logger.info("="*80)
+        logger.info("ESTATÍSTICAS DE SCRAPING")
+        logger.info("="*80)
+        logger.info(f"Tentativas totais: {stats['tentativas_totais']}")
+        logger.info(f"Páginas com sucesso: {stats['paginas_sucesso']}")
+        logger.info(f"Páginas com falha: {stats['paginas_falha']}")
+        logger.info(f"Taxa de sucesso: {stats['taxa_sucesso']}")
+        
+        logger.info("")
+        logger.info("="*80)
+        logger.info("RESULTADO FINAL")
+        logger.info("="*80)
+        logger.info(f"Total de produtos únicos: {len(produtos)}")
+        
+        if len(produtos) == 0:
+            logger.error("❌ NENHUM PRODUTO ENCONTRADO - MARCANDO COMO FALHA")
+            print("\n" + "="*100)
+            print("⚠️  NENHUM PRODUTO ENCONTRADO")
+            print("="*100)
+            print("\n💡 Possíveis causas:")
+            print("   1. Mercado Livre bloqueando requisições")
+            print("   2. Nenhum produto disponível no momento")
+            print("   3. Filtros muito restritivos")
+            print("\n🚨 Workflow marcado como FALHA para notificação\n")
+            
+            scraper.fechar()
+            
+            try:
+                with open('debug_temp/failure_reason.txt', 'w', encoding='utf-8') as f:
+                    f.write(f"NENHUM PRODUTO ENCONTRADO\n")
+                    f.write(f"Data: {datetime.datetime.now()}\n")
+                    f.write(f"Estatísticas:\n")
+                    f.write(f"  - Tentativas: {stats['tentativas_totais']}\n")
+                    f.write(f"  - Sucessos: {stats['paginas_sucesso']}\n")
+                    f.write(f"  - Falhas: {stats['paginas_falha']}\n")
+            except:
+                pass
+            
+            sys.exit(1)
+        
+        categorias_stats = defaultdict(int)
+        precos_por_categoria = defaultdict(list)
+        
+        for p in produtos:
+            categorias_stats[p['Categoria']] += 1
+            if p['Preço_Numerico'] < float('inf'):
+                precos_por_categoria[p['Categoria']].append(p['Preço_Numerico'])
+        
+        logger.info("")
+        logger.info("DISTRIBUIÇÃO POR CATEGORIA:")
+        for cat in sorted(categorias_stats.keys()):
+            qtd = categorias_stats[cat]
+            precos = precos_por_categoria[cat]
+            if precos:
+                media = sum(precos) / len(precos)
+                minimo = min(precos)
+                logger.info(f"  {cat}: {qtd} produtos | Média: R$ {media:.2f} | Mínimo: R$ {minimo:.2f}")
+            else:
+                logger.info(f"  {cat}: {qtd} produtos")
+        
+        if is_ci and len(produtos) > 0:
+            results_file = 'debug_temp/resultados.json'
+            with open(results_file, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'total_produtos': len(produtos),
+                    'categorias': {cat: qtd for cat, qtd in categorias_stats.items()},
+                    'produtos': produtos[:10],
+                    'stats': stats,
+                    'timestamp': datetime.datetime.now().isoformat()
+                }, f, ensure_ascii=False, indent=2)
+            logger.info(f"💾 Resultados salvos em: {results_file}")
+        
+        exibir_relatorio_console(produtos)
+        
+        produtos_validos = [p for p in produtos if p['Preço_Numerico'] < float('inf')]
+        if produtos_validos:
+            top_baratos = sorted(produtos_validos, key=lambda x: x['Preço_Numerico'])[:5]
+            
+            print("\n" + "="*100)
+            print("🏆 TOP 5 PRODUTOS MAIS BARATOS")
+            print("="*100)
+            
+            for i, p in enumerate(top_baratos, 1):
+                print(f"\n{i}º - {p['Título'][:70]}")
+                print(f"    💰 {p['Preço']} | 🏷️  {p['Categoria']}")
+                print(f"    🔗 {p['Link']}")
+        
+        print("\n" + "="*100)
+        print("📧 ENVIANDO RELATÓRIO POR E-MAIL")
+        print("="*100)
+        
+        email_enviado = enviar_email(produtos)
+        
+        duracao = time.time() - inicio_execucao
+        
+        print("\n" + "╔" + "═"*98 + "╗")
+        print("║" + " "*100 + "║")
+        
+        if email_enviado:
+            print("║" + "  ✅ PROCESSO CONCLUÍDO COM SUCESSO!".center(100) + "║")
+        else:
+            print("║" + "  ⚠️  PROCESSO CONCLUÍDO (erro no e-mail)".center(100) + "║")
+        
+        print("║" + " "*100 + "║")
+        print("║" + f"  📊 {len(produtos)} produtos processados".center(100) + "║")
+        print("║" + f"  📧 E-mail: {'Enviado' if email_enviado else 'Falhou'}".center(100) + "║")
+        print("║" + f"  ⏱️  Tempo: {duracao:.1f}s".center(100) + "║")
+        print("║" + " "*100 + "║")
+        print("╚" + "═"*98 + "╝\n")
+        
+        logger.info(f"Execução concluída em {duracao:.1f} segundos")
+        logger.info(f"Produtos processados: {len(produtos)}")
+        logger.info(f"E-mail enviado: {'Sim' if email_enviado else 'Não'}")
+        
+        scraper.fechar()
+        sys.exit(0)
+        
+    except KeyboardInterrupt:
+        logger.warning("Execução interrompida pelo usuário")
+        print("\n\n⚠️  Execução interrompida pelo usuário")
+        print("👋 Até logo!\n")
+        sys.exit(130)
+        
+    except Exception as e:
+        logger.critical(f"ERRO CRÍTICO: {e}")
+        print("\n" + "="*100)
+        print("❌ ERRO CRÍTICO")
+        print("="*100)
+        print(f"\n{e}\n")
+        
+        import traceback
+        try:
+            with open('debug_temp/critical_error.txt', 'w', encoding='utf-8') as f:
+                f.write(f"ERRO CRÍTICO\n")
+                f.write(f"Data: {datetime.datetime.now()}\n\n")
+                f.write(traceback.format_exc())
+            logger.info("💾 Traceback salvo em debug_temp/critical_error.txt")
+        except:
+            pass
+        
+        sys.exit(1)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PONTO DE ENTRADA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if __name__ == "__main__":
+    main()
+
             
             self.esperar_natural(2, 3)
             
@@ -918,80 +1098,420 @@ def exibir_relatorio_console(produtos: List[Dict]):
             print(f"   🔗 {p['Link']}")
 
 def enviar_email(produtos: List[Dict]) -> bool:
-    """Envia relatório por email"""
+    """Envia relatório por email com design moderno"""
     
     logger.info("Preparando envio de e-mail...")
     
     email = CONFIG['email_destino']
     senha = CONFIG['senha_app_destino']
     
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head><meta charset="UTF-8"><style>
-    body{{font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:20px}}
-    .container{{max-width:1200px;margin:0 auto;background:white;padding:30px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,0.1)}}
-    h1{{color:#333;border-bottom:3px solid #FFD700;padding-bottom:10px}}
-    h2{{color:#555;margin-top:30px;border-left:4px solid #4CAF50;padding-left:10px}}
-    table{{width:100%;border-collapse:collapse;margin-top:15px}}
-    th,td{{padding:12px;text-align:left;border-bottom:1px solid #ddd}}
-    th{{background:#f8f8f8;font-weight:600;color:#333}}
-    tr:hover{{background:#f9f9f9}}
-    .btn{{display:inline-block;padding:8px 16px;background:#4CAF50;color:white;text-decoration:none;border-radius:5px;font-size:12px}}
-    .btn:hover{{background:#45a049}}
-    .preco{{color:#e91e63;font-weight:bold}}
-    .footer{{margin-top:30px;padding-top:20px;border-top:2px solid #eee;color:#666;font-size:14px}}
-    </style></head>
-    <body>
-    <div class="container">
-    <h1>🏎️ Miniaturas F1 1/43 McDonald's</h1>
-    <p><strong>Total de produtos:</strong> {len(produtos)}</p>
-    <p><strong>Data da busca:</strong> {datetime.datetime.now().strftime('%d/%m/%Y às %H:%M')}</p>
-    """
-    
+    # Calcular estatísticas
     categorias = defaultdict(list)
     for p in produtos:
         if p['Preço_Numerico'] < float('inf'):
             categorias[p['Categoria']].append(p)
     
-    for cat, itens in sorted(categorias.items()):
+    num_categorias = len(categorias)
+    data_busca = datetime.datetime.now().strftime('%d/%m/%Y')
+    
+    # ===== HTML MELHORADO COM DESIGN MODERNO =====
+    html = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor F1 McDonald's</title>
+  <style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      padding: 20px;
+      line-height: 1.6;
+    }}
+    
+    .container {{
+      max-width: 800px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    }}
+    
+    .header {{
+      background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+      color: white;
+      padding: 40px 30px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }}
+    
+    .header::before {{
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+      animation: pulse 3s ease-in-out infinite;
+    }}
+    
+    @keyframes pulse {{
+      0%, 100% {{ transform: scale(1); opacity: 0.5; }}
+      50% {{ transform: scale(1.1); opacity: 0.8; }}
+    }}
+    
+    .header-content {{
+      position: relative;
+      z-index: 1;
+    }}
+    
+    .logo {{
+      font-size: 48px;
+      margin-bottom: 10px;
+      filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+    }}
+    
+    .header h1 {{
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }}
+    
+    .header p {{
+      font-size: 16px;
+      opacity: 0.95;
+      font-weight: 500;
+    }}
+    
+    .stats-bar {{
+      display: flex;
+      justify-content: space-around;
+      padding: 25px;
+      background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
+      border-bottom: 1px solid #e5e7eb;
+    }}
+    
+    .stat-item {{
+      text-align: center;
+    }}
+    
+    .stat-number {{
+      font-size: 32px;
+      font-weight: 800;
+      color: #dc2626;
+      display: block;
+      margin-bottom: 5px;
+    }}
+    
+    .stat-label {{
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #6b7280;
+      font-weight: 600;
+    }}
+    
+    .content {{
+      padding: 30px;
+    }}
+    
+    .category-section {{
+      margin-bottom: 40px;
+    }}
+    
+    .category-header {{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 3px solid #dc2626;
+    }}
+    
+    .category-icon {{
+      font-size: 28px;
+    }}
+    
+    .category-title {{
+      font-size: 22px;
+      font-weight: 700;
+      color: #1f2937;
+    }}
+    
+    .category-count {{
+      margin-left: auto;
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      color: white;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+    }}
+    
+    .product-card {{
+      background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }}
+    
+    .product-card:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(220, 38, 38, 0.15);
+      border-color: #dc2626;
+    }}
+    
+    .product-card::before {{
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: linear-gradient(180deg, #dc2626, #ef4444);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }}
+    
+    .product-card:hover::before {{
+      opacity: 1;
+    }}
+    
+    .product-header {{
+      display: flex;
+      align-items: flex-start;
+      gap: 15px;
+      margin-bottom: 12px;
+    }}
+    
+    .product-position {{
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      color: white;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 18px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }}
+    
+    .product-info {{
+      flex: 1;
+    }}
+    
+    .product-title {{
+      font-size: 16px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }}
+    
+    .product-footer {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+      flex-wrap: wrap;
+    }}
+    
+    .product-price {{
+      font-size: 26px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }}
+    
+    .product-link {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      color: white;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+    }}
+    
+    .product-link:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(220, 38, 38, 0.3);
+    }}
+    
+    .footer {{
+      background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }}
+    
+    .footer-icon {{
+      font-size: 36px;
+      margin-bottom: 15px;
+    }}
+    
+    .footer h3 {{
+      font-size: 18px;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }}
+    
+    .footer p {{
+      opacity: 0.8;
+      font-size: 14px;
+      margin-bottom: 5px;
+    }}
+    
+    .footer-badge {{
+      display: inline-block;
+      background: rgba(220, 38, 38, 0.2);
+      color: #fca5a5;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 10px;
+      border: 1px solid rgba(220, 38, 38, 0.3);
+    }}
+    
+    @media only screen and (max-width: 600px) {{
+      body {{ padding: 10px; }}
+      .header {{ padding: 30px 20px; }}
+      .header h1 {{ font-size: 22px; }}
+      .stats-bar {{ flex-direction: column; gap: 20px; }}
+      .content {{ padding: 20px; }}
+      .product-footer {{ flex-direction: column; align-items: flex-start; }}
+      .product-link {{ width: 100%; justify-content: center; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- HEADER -->
+    <div class="header">
+      <div class="header-content">
+        <div class="logo">🏎️</div>
+        <h1>Miniaturas F1 1/43 McDonald's</h1>
+        <p>Monitor de Preços - Mercado Livre Brasil</p>
+      </div>
+    </div>
+    
+    <!-- STATS BAR -->
+    <div class="stats-bar">
+      <div class="stat-item">
+        <span class="stat-number">{len(produtos)}</span>
+        <span class="stat-label">Produtos</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-number">{num_categorias}</span>
+        <span class="stat-label">Categorias</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-number">{data_busca}</span>
+        <span class="stat-label">Atualização</span>
+      </div>
+    </div>
+    
+    <!-- CONTENT -->
+    <div class="content">
+"""
+    
+    # Mapear ícones por categoria
+    icones_categoria = {
+        'Preta': '🖤',
+        'Vermelha': '❤️',
+        '2un': '📦',
+        'Desconhecido': '❓'
+    }
+    
+    # Gerar seções por categoria
+    for cat in sorted(categorias.keys()):
+        itens = categorias[cat]
         itens_ord = sorted(itens, key=lambda x: x['Preço_Numerico'])[:CONFIG['numero_itens_email']]
         
+        icone = icones_categoria.get(cat, '📦')
+        nome_categoria = {
+            'Preta': 'Versão Preta',
+            'Vermelha': 'Versão Vermelha',
+            '2un': 'Kit Duplo (2 unidades)',
+            'Desconhecido': 'Outras Versões'
+        }.get(cat, cat)
+        
         html += f"""
-        <h2>📦 {cat} - Top {len(itens_ord)} Melhores Preços</h2>
-        <table>
-        <tr>
-            <th style="width:50px">Pos.</th>
-            <th>Produto</th>
-            <th style="width:100px">Preço</th>
-            <th style="width:80px">Link</th>
-        </tr>
-        """
+      <!-- CATEGORIA {cat.upper()} -->
+      <div class="category-section">
+        <div class="category-header">
+          <span class="category-icon">{icone}</span>
+          <h2 class="category-title">{nome_categoria}</h2>
+          <span class="category-count">Top {len(itens_ord)} Ofertas</span>
+        </div>
+"""
         
-        for p in itens_ord:
-            titulo = p['Título'][:80] + ('...' if len(p['Título']) > 80 else '')
+        for idx, p in enumerate(itens_ord, 1):
+            titulo = p['Título'][:100] + ('...' if len(p['Título']) > 100 else '')
+            
             html += f"""
-            <tr>
-                <td style="text-align:center">{p['Posição']}</td>
-                <td>{titulo}</td>
-                <td class="preco">{p['Preço']}</td>
-                <td style="text-align:center"><a href="{p['Link']}" class="btn" target="_blank">Ver</a></td>
-            </tr>
-            """
+        <div class="product-card">
+          <div class="product-header">
+            <div class="product-position">{idx}</div>
+            <div class="product-info">
+              <div class="product-title">{titulo}</div>
+            </div>
+          </div>
+          <div class="product-footer">
+            <div class="product-price">{p['Preço']}</div>
+            <a href="{p['Link']}" class="product-link">
+              Ver Oferta →
+            </a>
+          </div>
+        </div>
+"""
         
-        html += "</table>"
+        html += """
+      </div>
+"""
     
+    # Footer
     html += """
-    <div class="footer">
-    <strong>🤖 Monitor Automático de Preços</strong><br>
-    Mercado Livre Brasil<br>
-    Sistema integrado com auto-login
     </div>
-    </div></body></html>
-    """
     
+    <!-- FOOTER -->
+    <div class="footer">
+      <div class="footer-icon">🤖</div>
+      <h3>Monitor Automático de Preços</h3>
+      <p>Sistema integrado com auto-login</p>
+      <p>Mercado Livre Brasil</p>
+      <div class="footer-badge">v4.0 • Python + Selenium</div>
+    </div>
+    
+  </div>
+</body>
+</html>"""
+    
+    # Criar e enviar email
     msg = EmailMessage()
-    msg['Subject'] = f'📦 F1 McDonald\'s 1/43 - {len(produtos)} produtos encontrados'
+    msg['Subject'] = f'🏎️ F1 McDonald\'s 1/43 - {len(produtos)} produtos encontrados'
     msg['From'] = email
     msg['To'] = email
     msg.set_content("Visualize este email em HTML para ver o relatório completo.")
@@ -1007,187 +1527,3 @@ def enviar_email(produtos: List[Dict]) -> bool:
     except Exception as e:
         logger.error(f"Erro ao enviar e-mail: {e}")
         return False
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FUNÇÃO PRINCIPAL
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def main():
-    """Função principal"""
-    
-    print("\n" + "╔" + "═"*98 + "╗")
-    print("║" + "  🏎️  MONITOR DE PREÇOS F1 1/43 McDONALD'S".center(100) + "║")
-    print("║" + "  Mercado Livre Brasil - v4.0 (Auto-Login)".center(100) + "║")
-    print("╚" + "═"*98 + "╝\n")
-    
-    is_ci = os.environ.get('CI') == 'true' or os.environ.get('GITHUB_ACTIONS') == 'true'
-    if is_ci:
-        logger.info("🤖 Executando em ambiente CI/CD (GitHub Actions)")
-        os.makedirs('debug_temp', exist_ok=True)
-    
-    logger.info("Iniciando Monitor de Preços v4.0")
-    
-    inicio_execucao = time.time()
-    
-    try:
-        scraper = MercadoLivreScraper()
-        produtos = buscar_produtos(scraper)
-        
-        produtos_unicos = {}
-        for p in produtos:
-            if p['ID'] not in produtos_unicos:
-                produtos_unicos[p['ID']] = p
-        
-        produtos = list(produtos_unicos.values())
-        
-        stats = scraper.get_stats()
-        logger.info("")
-        logger.info("="*80)
-        logger.info("ESTATÍSTICAS DE SCRAPING")
-        logger.info("="*80)
-        logger.info(f"Tentativas totais: {stats['tentativas_totais']}")
-        logger.info(f"Páginas com sucesso: {stats['paginas_sucesso']}")
-        logger.info(f"Páginas com falha: {stats['paginas_falha']}")
-        logger.info(f"Taxa de sucesso: {stats['taxa_sucesso']}")
-        
-        logger.info("")
-        logger.info("="*80)
-        logger.info("RESULTADO FINAL")
-        logger.info("="*80)
-        logger.info(f"Total de produtos únicos: {len(produtos)}")
-        
-        # CORREÇÃO 2: Forçar exit code 1 quando nenhum produto encontrado
-        if len(produtos) == 0:
-            logger.error("❌ NENHUM PRODUTO ENCONTRADO - MARCANDO COMO FALHA")
-            print("\n" + "="*100)
-            print("⚠️  NENHUM PRODUTO ENCONTRADO")
-            print("="*100)
-            print("\n💡 Possíveis causas:")
-            print("   1. Mercado Livre bloqueando requisições")
-            print("   2. Nenhum produto disponível no momento")
-            print("   3. Filtros muito restritivos")
-            print("\n🚨 Workflow marcado como FALHA para notificação\n")
-            
-            scraper.fechar()
-            
-            try:
-                with open('debug_temp/failure_reason.txt', 'w', encoding='utf-8') as f:
-                    f.write(f"NENHUM PRODUTO ENCONTRADO\n")
-                    f.write(f"Data: {datetime.datetime.now()}\n")
-                    f.write(f"Estatísticas:\n")
-                    f.write(f"  - Tentativas: {stats['tentativas_totais']}\n")
-                    f.write(f"  - Sucessos: {stats['paginas_sucesso']}\n")
-                    f.write(f"  - Falhas: {stats['paginas_falha']}\n")
-            except:
-                pass
-            
-            sys.exit(1)
-        
-        categorias_stats = defaultdict(int)
-        precos_por_categoria = defaultdict(list)
-        
-        for p in produtos:
-            categorias_stats[p['Categoria']] += 1
-            if p['Preço_Numerico'] < float('inf'):
-                precos_por_categoria[p['Categoria']].append(p['Preço_Numerico'])
-        
-        logger.info("")
-        logger.info("DISTRIBUIÇÃO POR CATEGORIA:")
-        for cat in sorted(categorias_stats.keys()):
-            qtd = categorias_stats[cat]
-            precos = precos_por_categoria[cat]
-            if precos:
-                media = sum(precos) / len(precos)
-                minimo = min(precos)
-                logger.info(f"  {cat}: {qtd} produtos | Média: R$ {media:.2f} | Mínimo: R$ {minimo:.2f}")
-            else:
-                logger.info(f"  {cat}: {qtd} produtos")
-        
-        if is_ci and len(produtos) > 0:
-            results_file = 'debug_temp/resultados.json'
-            with open(results_file, 'w', encoding='utf-8') as f:
-                json.dump({
-                    'total_produtos': len(produtos),
-                    'categorias': {cat: qtd for cat, qtd in categorias_stats.items()},
-                    'produtos': produtos[:10],
-                    'stats': stats,
-                    'timestamp': datetime.datetime.now().isoformat()
-                }, f, ensure_ascii=False, indent=2)
-            logger.info(f"💾 Resultados salvos em: {results_file}")
-        
-        exibir_relatorio_console(produtos)
-        
-        produtos_validos = [p for p in produtos if p['Preço_Numerico'] < float('inf')]
-        if produtos_validos:
-            top_baratos = sorted(produtos_validos, key=lambda x: x['Preço_Numerico'])[:5]
-            
-            print("\n" + "="*100)
-            print("🏆 TOP 5 PRODUTOS MAIS BARATOS")
-            print("="*100)
-            
-            for i, p in enumerate(top_baratos, 1):
-                print(f"\n{i}º - {p['Título'][:70]}")
-                print(f"    💰 {p['Preço']} | 🏷️  {p['Categoria']}")
-                print(f"    🔗 {p['Link']}")
-        
-        print("\n" + "="*100)
-        print("📧 ENVIANDO RELATÓRIO POR E-MAIL")
-        print("="*100)
-        
-        email_enviado = enviar_email(produtos)
-        
-        duracao = time.time() - inicio_execucao
-        
-        print("\n" + "╔" + "═"*98 + "╗")
-        print("║" + " "*100 + "║")
-        
-        if email_enviado:
-            print("║" + "  ✅ PROCESSO CONCLUÍDO COM SUCESSO!".center(100) + "║")
-        else:
-            print("║" + "  ⚠️  PROCESSO CONCLUÍDO (erro no e-mail)".center(100) + "║")
-        
-        print("║" + " "*100 + "║")
-        print("║" + f"  📊 {len(produtos)} produtos processados".center(100) + "║")
-        print("║" + f"  📧 E-mail: {'Enviado' if email_enviado else 'Falhou'}".center(100) + "║")
-        print("║" + f"  ⏱️  Tempo: {duracao:.1f}s".center(100) + "║")
-        print("║" + " "*100 + "║")
-        print("╚" + "═"*98 + "╝\n")
-        
-        logger.info(f"Execução concluída em {duracao:.1f} segundos")
-        logger.info(f"Produtos processados: {len(produtos)}")
-        logger.info(f"E-mail enviado: {'Sim' if email_enviado else 'Não'}")
-        
-        scraper.fechar()
-        sys.exit(0)
-        
-    except KeyboardInterrupt:
-        logger.warning("Execução interrompida pelo usuário")
-        print("\n\n⚠️  Execução interrompida pelo usuário")
-        print("👋 Até logo!\n")
-        sys.exit(130)
-        
-    except Exception as e:
-        logger.critical(f"ERRO CRÍTICO: {e}")
-        print("\n" + "="*100)
-        print("❌ ERRO CRÍTICO")
-        print("="*100)
-        print(f"\n{e}\n")
-        
-        import traceback
-        try:
-            with open('debug_temp/critical_error.txt', 'w', encoding='utf-8') as f:
-                f.write(f"ERRO CRÍTICO\n")
-                f.write(f"Data: {datetime.datetime.now()}\n\n")
-                f.write(traceback.format_exc())
-            logger.info("💾 Traceback salvo em debug_temp/critical_error.txt")
-        except:
-            pass
-        
-        sys.exit(1)
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PONTO DE ENTRADA
-# ═══════════════════════════════════════════════════════════════════════════════
-
-if __name__ == "__main__":
-    main()
