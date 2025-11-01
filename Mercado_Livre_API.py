@@ -884,12 +884,14 @@ def enviar_email(produtos: List[Dict]) -> bool:
   <title>Monitor F1 McDonald's</title>
   <style>
     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    
     body {{
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
       padding: 20px;
       line-height: 1.6;
     }}
+    
     .container {{
       max-width: 800px;
       margin: 0 auto;
@@ -898,6 +900,7 @@ def enviar_email(produtos: List[Dict]) -> bool:
       overflow: hidden;
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
     }}
+    
     .header {{
       background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
       color: white;
@@ -906,6 +909,7 @@ def enviar_email(produtos: List[Dict]) -> bool:
       position: relative;
       overflow: hidden;
     }}
+    
     .header::before {{
       content: '';
       position: absolute;
@@ -916,89 +920,242 @@ def enviar_email(produtos: List[Dict]) -> bool:
       background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
       animation: pulse 3s ease-in-out infinite;
     }}
+    
     @keyframes pulse {{
       0%, 100% {{ transform: scale(1); opacity: 0.5; }}
       50% {{ transform: scale(1.1); opacity: 0.8; }}
     }}
-    .header-content {{ position: relative; z-index: 1; }}
+    
+    .header-content {{
+      position: relative;
+      z-index: 1;
+    }}
+    
     .logo {{
       font-size: 48px;
       margin-bottom: 10px;
       filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
     }}
+    
     .header h1 {{
-      font-size: 28px; font-weight: 700; margin-bottom: 8px;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
       text-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }}
-    .header p {{ font-size: 16px; opacity: 0.95; font-weight: 500; }}
+    
+    .header p {{
+      font-size: 16px;
+      opacity: 0.95;
+      font-weight: 500;
+    }}
+    
     .stats-bar {{
-      display: flex; justify-content: space-around; padding: 25px;
+      display: flex;
+      justify-content: space-around;
+      padding: 25px;
       background: linear-gradient(180deg, #fafafa 0%, #f5f5f5 100%);
       border-bottom: 1px solid #e5e7eb;
     }}
-    .stat-item {{ text-align: center; }}
+    
+    .stat-item {{
+      text-align: center;
+    }}
+    
     .stat-number {{
-      font-size: 32px; font-weight: 800; color: #dc2626; display: block; margin-bottom: 5px;
+      font-size: 32px;
+      font-weight: 800;
+      color: #dc2626;
+      display: block;
+      margin-bottom: 5px;
     }}
+    
     .stat-label {{
-      font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #6b7280;
+      font-weight: 600;
     }}
-    .content {{ padding: 30px; }}
-    .category-section {{ margin-bottom: 40px; }}
+    
+    .content {{
+      padding: 30px;
+    }}
+    
+    .category-section {{
+      margin-bottom: 40px;
+    }}
+    
     .category-header {{
-      display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
-      padding-bottom: 12px; border-bottom: 3px solid #dc2626;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 3px solid #dc2626;
     }}
-    .category-icon {{ font-size: 28px; }}
-    .category-title {{ font-size: 22px; font-weight: 700; color: #1f2937; }}
+    
+    .category-icon {{
+      font-size: 28px;
+    }}
+    
+    .category-title {{
+      font-size: 22px;
+      font-weight: 700;
+      color: #1f2937;
+    }}
+    
     .category-count {{
-      margin-left: auto; background: linear-gradient(135deg, #dc2626, #ef4444);
-      color: white; padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600;
+      margin-left: auto;
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      color: white;
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
       box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
     }}
+    
     .product-card {{
       background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
-      border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-bottom: 16px;
-      transition: all 0.3s ease; position: relative; overflow: hidden;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 16px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
     }}
+    
     .product-card:hover {{
       transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(220, 38, 38, 0.15); border-color: #dc2626;
+      box-shadow: 0 8px 24px rgba(220, 38, 38, 0.15);
+      border-color: #dc2626;
     }}
+    
     .product-card::before {{
-      content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
-      background: linear-gradient(180deg, #dc2626, #ef4444); opacity: 0; transition: opacity 0.3s ease;
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: linear-gradient(180deg, #dc2626, #ef4444);
+      opacity: 0;
+      transition: opacity 0.3s ease;
     }}
-    .product-card:hover::before {{ opacity: 1; }}
-    .product-header {{ display: flex; align-items: flex-start; gap: 15px; margin-bottom: 12px; }}
+    
+    .product-card:hover::before {{
+      opacity: 1;
+    }}
+    
+    .product-header {{
+      display: flex;
+      align-items: flex-start;
+      gap: 15px;
+      margin-bottom: 12px;
+    }}
+    
     .product-position {{
-      background: linear-gradient(135deg, #fbbf24, #f59e0b); color: white; width: 40px; height: 40px;
-      border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700;
-      font-size: 18px; flex-shrink: 0; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      color: white;
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 18px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
     }}
-    .product-info {{ flex: 1; }}
-    .product-title {{ font-size: 16px; font-weight: 600; color: #1f2937; margin-bottom: 8px; line-height: 1.4; }}
-    .product-footer {{ display: flex; justify-content: space-between; align-items: center; gap: 15px; flex-wrap: wrap; }}
+    
+    .product-info {{
+      flex: 1;
+    }}
+    
+    .product-title {{
+      font-size: 16px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 8px;
+      line-height: 1.4;
+    }}
+    
+    .product-footer {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+      flex-wrap: wrap;
+    }}
+    
     .product-price {{
-      font-size: 26px; font-weight: 800; background: linear-gradient(135deg, #dc2626, #ef4444);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      font-size: 26px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }}
+    
     .product-link {{
-      display: inline-flex; align-items: center; gap: 8px; background: linear-gradient(135deg, #dc2626, #ef4444);
-      color: white; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px;
-      transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      color: white;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
     }}
-    .product-link:hover {{ transform: translateY(-2px); box-shadow: 0 6px 16px rgba(220, 38, 38, 0.3); }}
+    
+    .product-link:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(220, 38, 38, 0.3);
+    }}
+    
     .footer {{
-      background: linear-gradient(135deg, #1f2937 0%, #374151 100%); color: white; padding: 30px; text-align: center;
+      background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
     }}
-    .footer-icon {{ font-size: 36px; margin-bottom: 15px; }}
-    .footer h3 {{ font-size: 18px; margin-bottom: 8px; font-weight: 700; }}
-    .footer p {{ opacity: 0.8; font-size: 14px; margin-bottom: 5px; }}
+    
+    .footer-icon {{
+      font-size: 36px;
+      margin-bottom: 15px;
+    }}
+    
+    .footer h3 {{
+      font-size: 18px;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }}
+    
+    .footer p {{
+      opacity: 0.8;
+      font-size: 14px;
+      margin-bottom: 5px;
+    }}
+    
     .footer-badge {{
-      display: inline-block; background: rgba(220, 38, 38, 0.2); color: #fca5a5; padding: 6px 14px; border-radius: 20px;
-      font-size: 12px; font-weight: 600; margin-top: 10px; border: 1px solid rgba(220, 38, 38, 0.3);
+      display: inline-block;
+      background: rgba(220, 38, 38, 0.2);
+      color: #fca5a5;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 10px;
+      border: 1px solid rgba(220, 38, 38, 0.3);
     }}
+    
     @media only screen and (max-width: 600px) {{
       body {{ padding: 10px; }}
       .header {{ padding: 30px 20px; }}
@@ -1020,7 +1177,7 @@ def enviar_email(produtos: List[Dict]) -> bool:
         <p>Monitor de Preços - Mercado Livre Brasil</p>
       </div>
     </div>
-
+    
     <!-- STATS BAR -->
     <div class="stats-bar">
       <div class="stat-item">
@@ -1036,7 +1193,7 @@ def enviar_email(produtos: List[Dict]) -> bool:
         <span class="stat-label">Atualização</span>
       </div>
     </div>
-
+    
     <!-- CONTENT -->
     <div class="content">
 """
@@ -1094,6 +1251,7 @@ def enviar_email(produtos: List[Dict]) -> bool:
     # Footer
     html += """
     </div>
+    
     <!-- FOOTER -->
     <div class="footer">
       <div class="footer-icon">🤖</div>
@@ -1102,6 +1260,7 @@ def enviar_email(produtos: List[Dict]) -> bool:
       <p>Mercado Livre Brasil</p>
       <div class="footer-badge">v4.0 • Python + Selenium</div>
     </div>
+    
   </div>
 </body>
 </html>"""
