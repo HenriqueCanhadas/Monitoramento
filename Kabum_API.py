@@ -84,6 +84,26 @@ PRODUTOS = [
         "preco_estimado": 3300.00
     },
     {
+        "product_key": "kabum-15",
+        "url": "https://www.kabum.com.br/produto/934759/console-sony-playstation-5-com-leitor-de-discos-ssd-1tb-controle-sem-fio-dualsense-2-jogos",
+        "preco_estimado": 3300.00
+    },
+    {
+        "product_key": "kabum-16",
+        "url": "https://www.kabum.com.br/produto/922661/console-sony-playstation-5-com-leitor-de-discos-ssd-1tb-controle-sem-fio-dualsense-2-jogos-1000050613",
+        "preco_estimado": 3300.00
+    },
+    {
+        "product_key": "kabum-17",
+        "url": "https://www.kabum.com.br/produto/636960/console-playstation-5-pro-sony-ssd-2tb-com-controle-sem-fio-dualsense-branco-1000046552",
+        "preco_estimado": 5000.00
+    },
+    {
+        "product_key": "kabum-18",
+        "url": "",
+        "preco_estimado": 3300.00
+    },
+    {
         "product_key": "kabum-9",
         "url": "https://www.kabum.com.br/produto/316365/cartao-de-memoria-sandisk-ultra-microsd-uhs-i-128gb-100mb-s-com-adaptador-sdsqunr-128g-gn3ma",
         "preco_estimado": 55.00
