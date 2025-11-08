@@ -99,11 +99,6 @@ PRODUTOS = [
         "preco_estimado": 5000.00
     },
     {
-        "product_key": "kabum-18",
-        "url": "",
-        "preco_estimado": 3300.00
-    },
-    {
         "product_key": "kabum-9",
         "url": "https://www.kabum.com.br/produto/316365/cartao-de-memoria-sandisk-ultra-microsd-uhs-i-128gb-100mb-s-com-adaptador-sdsqunr-128g-gn3ma",
         "preco_estimado": 55.00
