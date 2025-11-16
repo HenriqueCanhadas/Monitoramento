@@ -93,7 +93,7 @@ CONFIG = {
     'termos_relevantes': ["f1", "formula 1", "mcdonald"],
 
     # Exclusões
-    'exclusoes_titulo': ["hot wheels", "mclaren f1-mcl36", "Red Bull", "Red Bull Do Max Verstappen"],
+    'exclusoes_titulo': ["hot wheels", "mclaren f1-mcl36", "Red Bull", "Red Bull Do Max Verstappen", "Redbull"],
     'exclusoes_id': ["mlb-1929640090", "mlb22449590", "mlb5466709978"],
 
     # Parâmetros de busca
