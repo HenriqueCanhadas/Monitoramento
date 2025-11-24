@@ -102,7 +102,7 @@ CONFIG = {
     'numero_itens_email': 5,
 
     # Categorização
-    'padroes_preto': ["apxgp", "preto", "expensity", "cor apx", "modelo apxgp", "expensify"],
+    'padroes_preto': ["apxgp", "expensity", "cor apx", "modelo apxgp", "expensify"],
     'padroes_vermelho': ["vermelho", "automac", "app", "automaq", "maisto", "modelo vermelho"],
     'padroes_dupla': ["set 2un", "kit 2x", "kit c/2", "dupla", "2x miniatura", "kit com 2"],
 
