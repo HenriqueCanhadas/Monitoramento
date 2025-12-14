@@ -29,7 +29,7 @@ jobs:
           EMAIL_APP_P: ${{ secrets.EMAIL_APP_P }}
           SENHA_APP_P: ${{ secrets.SENHA_APP_P }}
           FORTNITE_API_KEY: ${{ secrets.FORTNITE_API_KEY }}
-        run: python fortnite_monitor_api.py
+        run: python Fortnite_API.py
       
       - name: Upload de logs (em caso de erro)
         if: failure()
