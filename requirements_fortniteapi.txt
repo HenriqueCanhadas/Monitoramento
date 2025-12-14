@@ -1,0 +1,9 @@
+# Selenium e driver anti-detecção
+selenium>=4.15.0
+undetected-chromedriver>=3.5.4
+
+# HTTP Requests
+requests>=2.31.0
+
+# Utilitários
+python-dotenv>=1.0.0
