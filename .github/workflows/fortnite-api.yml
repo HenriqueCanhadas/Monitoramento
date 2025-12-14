@@ -1,0 +1,42 @@
+name: Fortnite
+
+on:
+  schedule:
+    # 10:00 horário de Brasília = 13:00 UTC (Brasília está UTC-3)
+    - cron: '0 13 * * *'
+  workflow_dispatch:  # Permite execução manual
+
+jobs:
+  verificar-loja-api:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+      
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Instalar dependências Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements_fortniteapi.txt
+      
+      - name: Rodar verificação da loja (Fortnite API)
+        env:
+          EMAIL_APP_P: ${{ secrets.EMAIL_APP_P }}
+          SENHA_APP_P: ${{ secrets.SENHA_APP_P }}
+          FORTNITE_API_KEY: ${{ secrets.FORTNITE_API_KEY }}
+        run: python fortnite_monitor_api.py
+      
+      - name: Upload de logs (em caso de erro)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-api
+          path: |
+            *.log
+            *.txt
+          retention-days: 7
