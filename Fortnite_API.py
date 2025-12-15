@@ -20,13 +20,26 @@ import os
 # ========================================
 
 ITENS_MONITORAR = [
-    "Vegeta",
-    "Goku",
-    "Desentupidor",
-    "Skibidi Toilet",
-    "Naruto",
-    "Kratos",
-    "Master Chief"
+O Batman Que Ri,
+Superman,
+Hatsune Miku,
+V,
+Johnny Silverhand,
+Iron Man,
+Darth Vader,
+Darth Vader Samurai,
+Stormtrooper Samurai,
+Yuji Itadori,
+Megumi Fushiguro,
+Satoru Gojo,
+Nobara Kugisaki,
+Goku Black,
+Eren Jaeger,
+Mikasa Ackermann,
+Captain Levi,
+Son Goku,
+Vegeta,
+Bulma
 ]
 
 # Configuração de Email
