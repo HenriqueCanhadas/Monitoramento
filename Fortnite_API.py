@@ -22,7 +22,6 @@ ITENS_MONITORAR = [
     "O Batman Que Ri",
     "Superman",
     "Hatsune Miku",
-    "V",
     "Johnny Silverhand",
     "Iron Man",
     "Darth Vader",
