@@ -9,6 +9,7 @@ import smtplib
 from email.message import EmailMessage
 import os
 from supabase import create_client, Client
+import requests
 
 # ========================================
 # CONFIGURAÇÕES VIA VARIÁVEIS DE AMBIENTE
@@ -21,6 +22,10 @@ SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 # Email
 EMAIL_REMETENTE = os.environ.get('EMAIL_APP_P')
 SENHA_APP = os.environ.get('SENHA_APP_P')
+
+# Telegram (com valores padrão para teste)
+TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
 # Validar variáveis obrigatórias
 required_vars = {
@@ -757,6 +762,113 @@ def enviar_email(produtos_info, disponiveis, esgotados, erros, agora):
         return False
 
 # ========================================
+# FUNÇÕES DE TELEGRAM
+# ========================================
+
+def criar_mensagem_telegram(produtos_info, disponiveis, esgotados, erros, agora):
+    """Cria mensagem formatada para o Telegram usando HTML - APENAS produtos disponíveis"""
+    
+    # Filtra apenas produtos disponíveis
+    produtos_disponiveis = [p for p in produtos_info if p['tipo'] == 'disponivel']
+    
+    # Cabeçalho
+    mensagem = f"""🔍 <b>RELATÓRIO KABUM!</b>
+📅 <i>{agora}</i>
+
+━━━━━━━━━━━━━━━
+📊 <b>RESUMO</b>
+━━━━━━━━━━━━━━━
+✅ Disponíveis: <b>{disponiveis}</b>
+❌ Esgotados: <b>{esgotados}</b>
+⚠️ Erros: <b>{erros}</b>
+
+"""
+    
+    # Se não houver produtos disponíveis, retorna apenas o resumo
+    if len(produtos_disponiveis) == 0:
+        mensagem += "━━━━━━━━━━━━━━━\n"
+        mensagem += "❌ <i>Nenhum produto disponível no momento</i>\n"
+        mensagem += "━━━━━━━━━━━━━━━\n"
+        mensagem += "<i>Sistema de Monitoramento KaBuM!</i>"
+        return mensagem
+    
+    # Adiciona seção de produtos disponíveis
+    mensagem += f"""━━━━━━━━━━━━━━━
+✅ <b>PRODUTOS DISPONÍVEIS</b>
+━━━━━━━━━━━━━━━
+
+"""
+    
+    for i, produto in enumerate(produtos_disponiveis, 1):
+        nome = produto['nome']
+        status = produto['status']
+        url = produto['url']
+        preco_estimado = produto.get('preco_estimado', 0)
+        menor_preco = produto.get('menor_preco', None)
+        
+        # Limita o nome a 50 caracteres para o Telegram
+        nome_curto = nome[:50] + "..." if len(nome) > 50 else nome
+        
+        # Escapa apenas < > & para HTML
+        nome_html = nome_curto.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        mensagem += f"<b>{i}. {nome_html}</b>\n"
+        mensagem += f"💰 {status}\n"
+        
+        # Menor preço
+        if menor_preco is not None and menor_preco > 0:
+            menor_preco_fmt = formatar_preco_brasileiro(menor_preco)
+            mensagem += f"🏆 Menor: {menor_preco_fmt}\n"
+        
+        # Diferença
+        preco_atual_num = extrair_valor_numerico(status)
+        diferenca = calcular_diferenca_preco(preco_atual_num, preco_estimado)
+        
+        if diferenca is not None:
+            if diferenca > 0:
+                mensagem += f"📈 +{diferenca:.1f}% (mais caro)\n"
+            elif diferenca < 0:
+                mensagem += f"📉 {diferenca:.1f}% (mais barato) 🎉\n"
+            else:
+                mensagem += f"➖ 0% (igual)\n"
+        
+        # Link usando HTML
+        mensagem += f'<a href="{url}">🛒 Ver produto</a>\n\n'
+
+    return mensagem
+
+def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
+    """Envia notificação via Telegram"""
+    try:
+        # Cria a mensagem
+        mensagem = criar_mensagem_telegram(produtos_info, disponiveis, esgotados, erros, agora)
+        
+        # URL da API do Telegram
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        
+        # Dados da requisição
+        payload = {
+            'chat_id': TELEGRAM_CHAT_ID,
+            'text': mensagem,
+            'parse_mode': 'HTML',  # Mudado de MarkdownV2 para HTML
+            'disable_web_page_preview': True
+        }
+        
+        # Envia a mensagem
+        response = requests.post(url, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            print("✅ Notificação enviada via Telegram com sucesso!")
+            return True
+        else:
+            print(f"❌ Erro ao enviar Telegram: {response.status_code} - {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Erro ao enviar notificação via Telegram: {str(e)}")
+        return False
+
+# ========================================
 # FUNÇÕES DE INTERFACE
 # ========================================
 
@@ -767,6 +879,7 @@ def imprimir_cabecalho(agora):
     print("="*120)
     print(f"⏰ 📅 Verificação iniciada em: {agora}")
     print(f"📧 Email: {EMAIL_REMETENTE}")
+    print(f"📱 Telegram: Chat ID {TELEGRAM_CHAT_ID}")
     print(f"🌐 Ambiente: {'CI/CD' if os.environ.get('CI') else 'Local'}")
     print("="*120 + "\n")
 
@@ -914,6 +1027,10 @@ def main():
     # Envia email
     print("\n📧 Enviando relatório por email...")
     enviar_email(produtos_info, produtos_disponiveis, produtos_esgotados, erros, agora)
+    
+    # Envia Telegram
+    print("\n📱 Enviando notificação via Telegram...")
+    enviar_telegram(produtos_info, produtos_disponiveis, produtos_esgotados, erros, agora)
     
     print("\n✅ Monitoramento concluído com sucesso!")
 
