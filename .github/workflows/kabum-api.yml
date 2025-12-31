@@ -1,11 +1,10 @@
-name: KaBuM
-
+name: KaBuM Monitor
 on:
   schedule:
     # 09:00 horário de Brasília = 12:00 UTC (Brasília está UTC-3)
     - cron: '0 12 * * *'
   workflow_dispatch:  # Permite execução manual
-
+  
 jobs:
   verificar-precos:
     runs-on: ubuntu-latest
@@ -36,4 +35,6 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           EMAIL_APP_P: ${{ secrets.EMAIL_APP_P }}
           SENHA_APP_P: ${{ secrets.SENHA_APP_P }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: xvfb-run python Kabum_API.py
