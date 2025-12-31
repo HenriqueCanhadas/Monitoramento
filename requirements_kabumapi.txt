@@ -9,3 +9,6 @@ postgrest>=0.10.0
 realtime>=1.0.0
 storage3>=0.5.0
 supafunc>=0.2.0
+
+# Requests (Para API do Telegram)
+requests>=2.31.0
