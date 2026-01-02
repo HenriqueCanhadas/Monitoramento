@@ -1,5 +1,6 @@
 """
-MONITOR FORTNITE - VERSÃO COMPLETA COM EMAIL OTIMIZADO PARA MOBILE
+MONITOR FORTNITE - VERSÃO ULTRA MELHORADA
+Estratégia: Lista todos os itens primeiro, depois faz matching inteligente
 """
 
 import undetected_chromedriver as uc
@@ -14,6 +15,8 @@ import random
 import smtplib
 from email.message import EmailMessage
 import os
+import unicodedata
+from difflib import SequenceMatcher
 
 # ========================================
 # CONFIGURAÇÕES
@@ -40,7 +43,6 @@ ITENS_MONITORAR = [
     "Bulma"
 ]
 
-
 # Configuração de Email
 EMAIL_REMETENTE = os.getenv('EMAIL_APP_P')
 SENHA_APP = os.getenv('SENHA_APP_P')
@@ -49,7 +51,7 @@ DESTINATARIOS = [EMAIL_REMETENTE]
 FORTNITE_SHOP_URL = "https://www.fortnite.com/item-shop?lang=pt-BR"
 
 # ========================================
-# FUNÇÕES AUXILIARES (mantidas iguais)
+# FUNÇÕES AUXILIARES
 # ========================================
 
 def obter_horario_brasilia():
@@ -59,15 +61,73 @@ def obter_horario_brasilia():
         return datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
 def normalizar_texto(texto):
-    import unicodedata
+    """Remove acentos, lowercase e remove espaços extras"""
     texto = texto.lower().strip()
     texto = ''.join(
         c for c in unicodedata.normalize('NFD', texto)
         if unicodedata.category(c) != 'Mn'
     )
+    texto = ' '.join(texto.split())
     return texto
 
+def similaridade_strings(str1, str2):
+    """
+    Calcula similaridade entre duas strings usando SequenceMatcher
+    Retorna valor entre 0 e 1 (1 = idêntico)
+    """
+    return SequenceMatcher(None, normalizar_texto(str1), normalizar_texto(str2)).ratio()
+
+def palavras_em_comum(str1, str2):
+    """Retorna conjunto de palavras em comum entre duas strings"""
+    palavras1 = set(normalizar_texto(str1).split())
+    palavras2 = set(normalizar_texto(str2).split())
+    return palavras1 & palavras2
+
+def e_match_valido(item_busca, item_loja):
+    """
+    Determina se um item da loja é um match válido para a busca
+    Usa múltiplos critérios para evitar falsos positivos
+    """
+    # Normaliza ambos
+    busca_norm = normalizar_texto(item_busca)
+    loja_norm = normalizar_texto(item_loja)
+    
+    # Critério 1: Match exato ou substring
+    if busca_norm == loja_norm or busca_norm in loja_norm:
+        return True, 1.0, "match_exato"
+    
+    # Critério 2: Todas as palavras da busca estão na loja
+    palavras_busca = set(busca_norm.split())
+    palavras_loja = set(loja_norm.split())
+    
+    # Remove palavras muito comuns/genéricas
+    palavras_genericas = {'pacote', 'pacotao', 'pack', 'bundle', 'set', 'edition', 'skin', 'outfit'}
+    palavras_busca = palavras_busca - palavras_genericas
+    palavras_loja = palavras_loja - palavras_genericas
+    
+    if palavras_busca and palavras_busca.issubset(palavras_loja):
+        # Todas as palavras da busca estão na loja
+        similaridade = len(palavras_busca) / len(palavras_loja) if palavras_loja else 0
+        return True, similaridade, "subset_completo"
+    
+    # Critério 3: Pelo menos 2 palavras significativas em comum
+    palavras_comuns = palavras_busca & palavras_loja
+    palavras_significativas = [p for p in palavras_comuns if len(p) >= 4]
+    
+    if len(palavras_significativas) >= 2:
+        similaridade = len(palavras_comuns) / len(palavras_busca) if palavras_busca else 0
+        if similaridade >= 0.7:  # 70% das palavras batem
+            return True, similaridade, "palavras_significativas"
+    
+    # Critério 4: Similaridade de string alta (para nomes compostos)
+    sim_score = similaridade_strings(item_busca, item_loja)
+    if sim_score >= 0.85:  # 85% de similaridade
+        return True, sim_score, "similaridade_alta"
+    
+    return False, 0.0, "nao_match"
+
 def encontrar_card_correto(driver, elemento_titulo, nome_item):
+    """Sobe na hierarquia DOM até encontrar o card completo com preço"""
     current = elemento_titulo
     nivel = 0
     max_niveis = 10
@@ -95,6 +155,9 @@ def encontrar_card_correto(driver, elemento_titulo, nome_item):
     return current
 
 def extrair_preco_do_card(driver, card_element, nome_item):
+    """Extrai preço do card com múltiplos métodos"""
+    
+    # Método 1: data-testid específico
     try:
         preco_elements = card_element.find_elements(By.XPATH, ".//*[@data-testid='current-vbuck-price']")
         
@@ -117,6 +180,19 @@ def extrair_preco_do_card(driver, card_element, nome_item):
     except:
         pass
     
+    # Método 2: Busca por classe
+    try:
+        preco_el = card_element.find_element(By.CSS_SELECTOR, '[class*="price"], [class*="vbuck"], [class*="cost"]')
+        texto = preco_el.text
+        preco_limpo = re.sub(r'[^\d]', '', texto)
+        if preco_limpo and preco_limpo.isdigit():
+            preco_num = int(preco_limpo)
+            if 100 <= preco_num <= 10000:
+                return preco_num
+    except:
+        pass
+    
+    # Método 3: Regex no texto do card
     try:
         texto_card = driver.execute_script("return arguments[0].textContent;", card_element)
         matches = re.findall(r'(\d{1,2}\.\d{3}|\d{3,5})\s*(?:V-?Bucks?)?', texto_card, re.IGNORECASE)
@@ -207,94 +283,183 @@ def aguardar_pagina_carregar(driver, timeout=30):
     print(f"   ⏰ Tempo total de carregamento: {tempo_total:.1f}s")
     return False
 
-def buscar_itens_na_loja(driver, itens_procurados):
-    resultados = []
-    itens_normalizados = {normalizar_texto(item): item for item in itens_procurados}
-    
-    print("\n🔍 Analisando loja do Fortnite...")
+def fazer_scroll_completo(driver):
+    """Faz scroll na página para carregar todos os itens"""
+    print("   📜 Fazendo scroll para carregar todos os itens...")
     
     try:
+        last_height = driver.execute_script("return document.body.scrollHeight")
+        
+        for i in range(5):
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(2)
+            
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            
+            if new_height == last_height:
+                break
+            
+            last_height = new_height
+        
+        driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(1)
+        
+        print("   ✅ Scroll completo\n")
+    except Exception as e:
+        print(f"   ⚠️ Erro no scroll: {e}\n")
+
+# ========================================
+# NOVA ESTRATÉGIA: LISTA TODOS OS ITENS PRIMEIRO
+# ========================================
+
+def listar_todos_itens_da_loja(driver):
+    """
+    PASSO 1: Lista TODOS os itens disponíveis na loja
+    Retorna: lista de dicionários com {nome, elemento, card}
+    """
+    print("\n📋 PASSO 1: Listando TODOS os itens da loja...")
+    
+    fazer_scroll_completo(driver)
+    
+    itens_encontrados = []
+    elementos_processados = set()
+    
+    try:
+        # Usa apenas o seletor principal que sabemos que funciona
         elementos_titulo = driver.find_elements(By.CSS_SELECTOR, '[data-testid="item-title"]')
-        print(f"   📄 Encontrados {len(elementos_titulo)} itens na loja\n")
         
-        itens_info = {}
+        print(f"   📄 Encontrados {len(elementos_titulo)} elementos de título\n")
         
-        for idx, elemento_titulo in enumerate(elementos_titulo):
+        for elemento in elementos_titulo:
             try:
-                nome_item = elemento_titulo.text.strip()
-                nome_normalizado = normalizar_texto(nome_item)
+                nome = elemento.text.strip()
                 
-                for item_norm, item_original in itens_normalizados.items():
-                    if item_norm in nome_normalizado:
-                        if item_original in itens_info:
-                            continue
-                        
-                        print(f"   🎯 ENCONTRADO: '{item_original}' → '{nome_item}'")
-                        
-                        card_element = encontrar_card_correto(driver, elemento_titulo, nome_item)
-                        preco = extrair_preco_do_card(driver, card_element, nome_item)
-                        
-                        if preco:
-                            itens_info[item_original] = {
-                                'encontrado': True,
-                                'preco': preco,
-                                'nome_completo': nome_item
-                            }
-                            print(f"   ✅ {item_original} = {preco} V-Bucks\n")
-                        else:
-                            itens_info[item_original] = {
-                                'encontrado': True,
-                                'preco': None,
-                                'nome_completo': nome_item
-                            }
-                            print(f"   ⚠️ Sem preço\n")
-                        
-            except:
+                if not nome or len(nome) < 2:
+                    continue
+                
+                # Evita duplicatas
+                nome_norm = normalizar_texto(nome)
+                if nome_norm in elementos_processados:
+                    continue
+                
+                elementos_processados.add(nome_norm)
+                
+                # Busca o card e preço
+                card = encontrar_card_correto(driver, elemento, nome)
+                preco = extrair_preco_do_card(driver, card, nome)
+                
+                itens_encontrados.append({
+                    'nome': nome,
+                    'nome_normalizado': nome_norm,
+                    'elemento': elemento,
+                    'card': card,
+                    'preco': preco
+                })
+                
+                preco_str = f"{preco} V-Bucks" if preco else "sem preço"
+                print(f"   • {nome} ({preco_str})")
+                
+            except Exception as e:
                 continue
         
-        for item_original in itens_procurados:
-            if item_original in itens_info:
-                info = itens_info[item_original]
-                preco_formatado = f"{info['preco']} V-Bucks" if info['preco'] else "Preço não detectado"
-                
-                resultados.append({
-                    'nome': item_original,
-                    'encontrado': True,
-                    'preco': preco_formatado,
-                    'preco_num': info['preco'],
-                    'nome_completo': info.get('nome_completo', '')
-                })
-            else:
-                resultados.append({
-                    'nome': item_original,
-                    'encontrado': False,
-                    'preco': None,
-                    'preco_num': None,
-                    'nome_completo': ''
-                })
+        print(f"\n   ✅ Total de {len(itens_encontrados)} itens únicos na loja\n")
         
     except Exception as e:
-        print(f"⚠️ Erro ao buscar itens: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"   ❌ Erro ao listar itens: {e}\n")
+    
+    return itens_encontrados
+
+def buscar_itens_monitorados(itens_loja, itens_procurados):
+    """
+    PASSO 2: Busca os itens monitorados na lista da loja
+    Usa matching inteligente para evitar falsos positivos
+    """
+    print("🔍 PASSO 2: Buscando itens monitorados na lista...\n")
+    
+    resultados = []
+    
+    for item_busca in itens_procurados:
+        melhor_match = None
+        melhor_score = 0
+        melhor_tipo = None
         
-        for item in itens_procurados:
+        # Testa contra cada item da loja
+        for item_loja in itens_loja:
+            e_match, score, tipo = e_match_valido(item_busca, item_loja['nome'])
+            
+            if e_match and score > melhor_score:
+                melhor_match = item_loja
+                melhor_score = score
+                melhor_tipo = tipo
+        
+        if melhor_match:
+            print(f"   ✅ '{item_busca}' → '{melhor_match['nome']}'")
+            print(f"      Score: {melhor_score:.0%} | Tipo: {melhor_tipo}")
+            if melhor_match['preco']:
+                print(f"      Preço: {melhor_match['preco']} V-Bucks")
+            print()
+            
             resultados.append({
-                'nome': item,
+                'nome': item_busca,
+                'encontrado': True,
+                'preco': f"{melhor_match['preco']} V-Bucks" if melhor_match['preco'] else "Preço não detectado",
+                'preco_num': melhor_match['preco'],
+                'nome_completo': melhor_match['nome'],
+                'score': melhor_score,
+                'tipo_match': melhor_tipo
+            })
+        else:
+            print(f"   ❌ '{item_busca}' não encontrado")
+            
+            # Mostra itens similares (pode ajudar a debugar)
+            similares = []
+            for item_loja in itens_loja:
+                sim = similaridade_strings(item_busca, item_loja['nome'])
+                if sim >= 0.4:  # 40% de similaridade
+                    similares.append((item_loja['nome'], sim))
+            
+            if similares:
+                similares.sort(key=lambda x: x[1], reverse=True)
+                print(f"      Itens similares encontrados:")
+                for nome_sim, score_sim in similares[:3]:
+                    print(f"         • {nome_sim} ({score_sim:.0%})")
+            print()
+            
+            resultados.append({
+                'nome': item_busca,
                 'encontrado': False,
                 'preco': None,
                 'preco_num': None,
-                'nome_completo': ''
+                'nome_completo': '',
+                'score': 0.0,
+                'tipo_match': None
             })
     
     return resultados
 
+def salvar_lista_loja(itens_loja, arquivo='loja_fortnite_completa.txt'):
+    """Salva lista completa da loja para referência"""
+    try:
+        with open(arquivo, 'w', encoding='utf-8') as f:
+            f.write("=" * 80 + "\n")
+            f.write("LISTA COMPLETA DA LOJA FORTNITE\n")
+            f.write(f"Data: {obter_horario_brasilia()}\n")
+            f.write("=" * 80 + "\n\n")
+            
+            for i, item in enumerate(itens_loja, 1):
+                preco_str = f"{item['preco']} V-Bucks" if item['preco'] else "Sem preço"
+                f.write(f"{i}. {item['nome']} - {preco_str}\n")
+        
+        print(f"   💾 Lista completa salva em: {arquivo}\n")
+    except Exception as e:
+        print(f"   ⚠️ Erro ao salvar lista: {e}\n")
+
 # ========================================
-# FUNÇÕES DE EMAIL - OTIMIZADO PARA MOBILE
+# EMAIL, DISPLAY E MAIN
 # ========================================
 
 def criar_html_email(resultados, agora):
-    """Cria HTML ultra-otimizado para email mobile E desktop"""
+    """Cria HTML do email - versão simplificada"""
     
     encontrados = sum(1 for r in resultados if r['encontrado'])
     nao_encontrados = len(resultados) - encontrados
@@ -330,43 +495,18 @@ def criar_html_email(resultados, agora):
                 background: linear-gradient(135deg, #00D9FF 0%, #0088CC 100%);
                 padding: 35px 25px;
                 text-align: center;
-                position: relative;
-                overflow: hidden;
-            }}
-            
-            .header::before {{
-                content: '';
-                position: absolute;
-                top: -50%;
-                left: -50%;
-                width: 200%;
-                height: 200%;
-                background: repeating-linear-gradient(
-                    45deg,
-                    transparent,
-                    transparent 10px,
-                    rgba(255,255,255,0.05) 10px,
-                    rgba(255,255,255,0.05) 20px
-                );
             }}
             
             .header h1 {{
                 color: white;
                 font-size: 42px;
                 margin: 0 0 10px 0;
-                text-shadow: 3px 3px 0px #0066AA, 5px 5px 0px rgba(0,0,0,0.3);
-                position: relative;
-                z-index: 1;
-                letter-spacing: 2px;
+                text-shadow: 3px 3px 0px #0066AA;
             }}
             
             .header p {{
                 color: #E0F7FF;
                 font-size: 16px;
-                margin: 0;
-                position: relative;
-                z-index: 1;
-                font-weight: 600;
             }}
             
             .stats {{
@@ -383,72 +523,32 @@ def criar_html_email(resultados, agora):
                 padding: 30px 20px;
                 text-align: center;
                 border: 4px solid;
-                transition: transform 0.3s ease, box-shadow 0.3s ease;
             }}
             
-            .stat-box:hover {{
-                transform: translateY(-5px);
-            }}
+            .stat-box.verde {{ border-color: #00FF85; }}
+            .stat-box.vermelho {{ border-color: #FF3366; }}
+            .stat-box.amarelo {{ border-color: #FFD700; }}
             
-            .stat-box.verde {{ 
-                border-color: #00FF85; 
-                background: linear-gradient(135deg, #0a3d2e 0%, #051f1a 100%);
-            }}
-            
-            .stat-box.verde:hover {{
-                box-shadow: 0 10px 30px rgba(0,255,133,0.3);
-            }}
-            
-            .stat-box.vermelho {{ 
-                border-color: #FF3366; 
-                background: linear-gradient(135deg, #3d0a1e 0%, #1f0510 100%);
-            }}
-            
-            .stat-box.vermelho:hover {{
-                box-shadow: 0 10px 30px rgba(255,51,102,0.3);
-            }}
-            
-            .stat-box.amarelo {{ 
-                border-color: #FFD700; 
-                background: linear-gradient(135deg, #3d2f0a 0%, #1f1705 100%);
-            }}
-            
-            .stat-box.amarelo:hover {{
-                box-shadow: 0 10px 30px rgba(255,215,0,0.3);
-            }}
-            
-            .stat-icon {{ 
-                font-size: 48px; 
-                margin-bottom: 12px;
-                filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
-            }}
+            .stat-icon {{ font-size: 48px; margin-bottom: 12px; }}
             
             .stat-number {{
                 font-size: 56px;
                 font-weight: bold;
                 margin: 12px 0;
-                line-height: 1;
-                text-shadow: 3px 3px 0px rgba(0,0,0,0.3);
             }}
             
             .stat-number.verde {{ color: #00FF85; }}
             .stat-number.vermelho {{ color: #FF3366; }}
-            .stat-number.amarelo {{ 
-                color: #FFD700; 
-                font-size: 42px; 
-            }}
+            .stat-number.amarelo {{ color: #FFD700; font-size: 42px; }}
             
             .stat-label {{
                 font-size: 13px;
                 color: #B0C4DE;
                 text-transform: uppercase;
                 font-weight: bold;
-                letter-spacing: 1.5px;
             }}
             
-            .items {{
-                padding: 30px 25px;
-            }}
+            .items {{ padding: 30px 25px; }}
             
             .item {{
                 background: linear-gradient(135deg, #1e3a5f 0%, #122841 100%);
@@ -456,26 +556,10 @@ def criar_html_email(resultados, agora):
                 padding: 20px;
                 margin-bottom: 15px;
                 border: 4px solid;
-                transition: all 0.3s ease;
             }}
             
-            .item:hover {{
-                transform: translateX(5px);
-            }}
-            
-            .item.verde {{ 
-                border-color: #00FF85; 
-                background: linear-gradient(135deg, #0f3d2e 0%, #0a2820 100%);
-            }}
-            
-            .item.verde:hover {{
-                box-shadow: 0 8px 25px rgba(0,255,133,0.2);
-            }}
-            
-            .item.vermelho {{ 
-                border-color: #FF3366;
-                opacity: 0.7;
-            }}
+            .item.verde {{ border-color: #00FF85; }}
+            .item.vermelho {{ border-color: #FF3366; opacity: 0.7; }}
             
             .item-top {{
                 display: flex;
@@ -494,39 +578,27 @@ def criar_html_email(resultados, agora):
                 color: white;
                 font-weight: bold;
                 font-size: 24px;
-                flex-shrink: 0;
                 margin-right: 15px;
-                box-shadow: 0 6px 15px rgba(0,217,255,0.4);
-                text-shadow: 2px 2px 0px rgba(0,0,0,0.3);
             }}
             
-            .item-texto {{
-                flex: 1;
-                min-width: 0;
-            }}
+            .item-texto {{ flex: 1; }}
             
             .item-nome {{
                 color: white;
                 font-size: 20px;
                 font-weight: bold;
                 margin-bottom: 5px;
-                word-wrap: break-word;
-                line-height: 1.3;
-                text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
             }}
             
             .item-sub {{
                 color: #B0C4DE;
                 font-size: 14px;
-                word-wrap: break-word;
-                line-height: 1.4;
             }}
             
             .item-bottom {{
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                flex-wrap: wrap;
                 gap: 12px;
             }}
             
@@ -536,8 +608,6 @@ def criar_html_email(resultados, agora):
                 font-size: 13px;
                 font-weight: bold;
                 text-transform: uppercase;
-                letter-spacing: 1px;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.3);
             }}
             
             .badge.verde {{
@@ -557,8 +627,6 @@ def criar_html_email(resultados, agora):
                 border-radius: 20px;
                 font-weight: bold;
                 font-size: 18px;
-                box-shadow: 0 4px 15px rgba(255,215,0,0.4);
-                text-shadow: 2px 2px 0px rgba(0,0,0,0.3);
             }}
             
             .botao-container {{
@@ -578,16 +646,6 @@ def criar_html_email(resultados, agora):
                 font-size: 20px;
                 text-transform: uppercase;
                 border: 4px solid #00FFFF;
-                letter-spacing: 2px;
-                box-shadow: 0 8px 25px rgba(0,217,255,0.5);
-                transition: all 0.3s ease;
-                text-shadow: 2px 2px 0px rgba(0,0,0,0.3);
-            }}
-            
-            .botao:hover {{
-                background: linear-gradient(135deg, #00FFFF 0%, #00D9FF 100%);
-                box-shadow: 0 10px 35px rgba(0,255,255,0.7);
-                transform: translateY(-3px);
             }}
             
             .footer {{
@@ -599,165 +657,24 @@ def criar_html_email(resultados, agora):
                 border-top: 3px solid #00D9FF;
             }}
             
-            .footer p {{ 
-                margin: 6px 0; 
-                line-height: 1.6;
-            }}
-            
-            .footer strong {{ 
-                color: #00D9FF; 
-                font-weight: 700;
-            }}
-            
-            /* ============================================ */
-            /* RESPONSIVIDADE PARA MOBILE */
-            /* ============================================ */
             @media only screen and (max-width: 600px) {{
-                body {{
-                    padding: 5px;
-                }}
-                
-                .email-wrapper {{
-                    border-radius: 12px;
-                    border-width: 3px;
-                    max-width: 100%;
-                }}
-                
-                .header {{
-                    padding: 20px 15px;
-                }}
-                
-                .header h1 {{
-                    font-size: 22px;
-                }}
-                
-                .header p {{
-                    font-size: 11px;
-                }}
-                
-                .stats {{
-                    grid-template-columns: 1fr;
-                    gap: 10px;
-                    padding: 15px 12px;
-                }}
-                
-                .stat-box {{
-                    padding: 15px 10px;
-                }}
-                
-                .stat-icon {{
-                    font-size: 28px;
-                }}
-                
-                .stat-number {{
-                    font-size: 32px;
-                }}
-                
-                .stat-number.amarelo {{
-                    font-size: 24px;
-                }}
-                
-                .stat-label {{
-                    font-size: 10px;
-                }}
-                
-                .items {{
-                    padding: 15px 12px;
-                }}
-                
-                .item {{
-                    padding: 12px;
-                    margin-bottom: 10px;
-                }}
-                
-                .item-numero {{
-                    width: 36px;
-                    height: 36px;
-                    font-size: 18px;
-                }}
-                
-                .item-nome {{
-                    font-size: 14px;
-                }}
-                
-                .item-sub {{
-                    font-size: 10px;
-                }}
-                
-                .badge {{
-                    padding: 6px 12px;
-                    font-size: 10px;
-                }}
-                
-                .preco {{
-                    padding: 6px 12px;
-                    font-size: 12px;
-                }}
-                
-                .botao-container {{
-                    padding: 20px 15px;
-                }}
-                
-                .botao {{
-                    padding: 15px 35px;
-                    font-size: 14px;
-                    width: 100%;
-                    max-width: 300px;
-                }}
-            }}
-            
-            /* ============================================ */
-            /* RESPONSIVIDADE PARA DESKTOP/TABLET */
-            /* ============================================ */
-            @media only screen and (min-width: 601px) and (max-width: 900px) {{
-                .email-wrapper {{
-                    max-width: 700px;
-                }}
-                
-                .header h1 {{
-                    font-size: 36px;
-                }}
-                
-                .stat-number {{
-                    font-size: 48px;
-                }}
-                
-                .stat-number.amarelo {{
-                    font-size: 36px;
-                }}
-            }}
-            
-            /* ============================================ */
-            /* AJUSTE PARA TELAS MUITO PEQUENAS */
-            /* ============================================ */
-            @media only screen and (max-width: 375px) {{
-                .header h1 {{
-                    font-size: 20px;
-                }}
-                
-                .stat-number {{
-                    font-size: 28px;
-                }}
-                
-                .stat-number.amarelo {{
-                    font-size: 20px;
-                }}
-                
-                .item-nome {{
-                    font-size: 13px;
-                }}
+                body {{ padding: 5px; }}
+                .header h1 {{ font-size: 22px; }}
+                .stats {{ grid-template-columns: 1fr; gap: 10px; padding: 15px 12px; }}
+                .stat-number {{ font-size: 32px; }}
+                .item {{ padding: 12px; }}
+                .item-nome {{ font-size: 14px; }}
+                .botao {{ padding: 15px 35px; font-size: 14px; width: 100%; }}
             }}
         </style>
     </head>
     <body>
         <div class="email-wrapper">
-            <!-- Header -->
             <div class="header">
                 <h1>🎮 FORTNITE SHOP 🛒</h1>
-                <p>📅 Atualizado em {agora}</p>
+                <p>📅 {agora}</p>
             </div>
             
-            <!-- Stats -->
             <div class="stats">
                 <div class="stat-box verde">
                     <div class="stat-icon">✅</div>
@@ -778,7 +695,6 @@ def criar_html_email(resultados, agora):
                 </div>
             </div>
             
-            <!-- Items -->
             <div class="items">
     """
     
@@ -792,7 +708,7 @@ def criar_html_email(resultados, agora):
         status_icon = "✓" if encontrado else "✗"
         status_text = "Na Loja" if encontrado else "Ausente"
         
-        display_name = nome_completo if nome_completo and nome_completo != nome else nome
+        display_name = nome_completo if nome_completo else nome
         subtitle = f"Nome na loja: {nome_completo}" if nome_completo and nome_completo != nome else f"Buscando: {nome}"
         
         html += f"""
@@ -809,9 +725,7 @@ def criar_html_email(resultados, agora):
         """
         
         if encontrado and preco_num:
-            html += f"""
-                        <span class="preco">💎 {preco_num:,}</span>
-        """
+            html += f'<span class="preco">💎 {preco_num:,}</span>'
         
         html += """
                     </div>
@@ -821,18 +735,13 @@ def criar_html_email(resultados, agora):
     html += f"""
             </div>
             
-            <!-- Botão -->
             <div class="botao-container">
-                <a href="{FORTNITE_SHOP_URL}" class="botao">
-                    🛒 VISITAR LOJA
-                </a>
+                <a href="{FORTNITE_SHOP_URL}" class="botao">🛒 VISITAR LOJA</a>
             </div>
             
-            <!-- Footer -->
             <div class="footer">
                 <p><strong>Monitor Automático da Loja Fortnite</strong></p>
-                <p>Desenvolvido com 💙 | © 2025</p>
-                <p>Fique de olho nos seus itens favoritos! 🎯</p>
+                <p>© 2025 | Sistema de Matching Inteligente</p>
             </div>
         </div>
     </body>
@@ -848,7 +757,7 @@ def enviar_email(resultados, agora):
         
         msg = EmailMessage()
         encontrados = sum(1 for r in resultados if r['encontrado'])
-        msg['Subject'] = f'🎮 Fortnite Shop Alert - {encontrados} itens encontrados!'
+        msg['Subject'] = f'🎮 Fortnite Shop - {encontrados} itens encontrados!'
         msg['From'] = EMAIL_REMETENTE
         msg['To'] = ', '.join(DESTINATARIOS)
         
@@ -864,8 +773,6 @@ def enviar_email(resultados, agora):
         return True
     except Exception as e:
         print(f"   ❌ Erro ao enviar email: {str(e)}")
-        import traceback
-        traceback.print_exc()
         return False
 
 def salvar_screenshot(driver, nome="fortnite_loja.png"):
@@ -875,13 +782,9 @@ def salvar_screenshot(driver, nome="fortnite_loja.png"):
     except:
         pass
 
-# ========================================
-# FUNÇÕES DE EXIBIÇÃO
-# ========================================
-
 def imprimir_cabecalho(agora):
     print("\n" + "="*100)
-    print("🎮 MONITOR DA LOJA FORTNITE - VERSÃO COMPLETA".center(100))
+    print("🎮 MONITOR FORTNITE - VERSÃO ULTRA (Lista Completa + Matching Inteligente)".center(100))
     print("="*100)
     print(f"⏰ Verificação iniciada em: {agora}")
     print(f"🔍 Itens monitorados: {len(ITENS_MONITORAR)}")
@@ -889,7 +792,7 @@ def imprimir_cabecalho(agora):
 
 def imprimir_resultados(resultados):
     print("\n" + "="*100)
-    print("📊 RESULTADOS DA BUSCA".center(100))
+    print("📊 RESULTADOS FINAIS".center(100))
     print("="*100 + "\n")
     
     for i, item in enumerate(resultados, 1):
@@ -901,12 +804,12 @@ def imprimir_resultados(resultados):
         print(f"[{i}/{len(resultados)}] {nome}")
         
         if encontrado:
-            print(f"      Status: ✅ ENCONTRADO NA LOJA!")
-            if nome_completo and nome_completo.lower() != nome.lower():
+            print(f"      ✅ ENCONTRADO!")
+            if nome_completo and nome_completo != nome:
                 print(f"      Nome na loja: {nome_completo}")
             print(f"      Preço: 💰 {preco}")
         else:
-            print(f"      Status: ❌ Não está na loja hoje")
+            print(f"      ❌ Não encontrado")
         
         print("-"*100)
 
@@ -917,21 +820,17 @@ def imprimir_resumo(resultados):
     print("\n" + "="*100)
     print("📈 RESUMO".center(100))
     print("="*100)
-    print(f"✅ Itens encontrados: {encontrados}")
-    print(f"❌ Itens não encontrados: {nao_encontrados}")
-    print(f"📋 Total verificado: {len(resultados)}")
+    print(f"✅ Encontrados: {encontrados}")
+    print(f"❌ Não encontrados: {nao_encontrados}")
+    print(f"📋 Total: {len(resultados)}")
     print("="*100 + "\n")
-
-# ========================================
-# FUNÇÃO PRINCIPAL
-# ========================================
 
 def main():
     agora = obter_horario_brasilia()
     
     imprimir_cabecalho(agora)
     
-    print("🌐 Iniciando navegador com proteção anti-detecção...")
+    print("🌐 Iniciando navegador...")
     driver = inicializar_driver_antidetect()
     
     try:
@@ -939,11 +838,19 @@ def main():
         driver.get(FORTNITE_SHOP_URL)
         
         if not aguardar_pagina_carregar(driver):
-            print("⚠️ Timeout ao aguardar página - tentando buscar mesmo assim...")
+            print("⚠️ Timeout - tentando mesmo assim...")
         
         salvar_screenshot(driver, "fortnite_loja.png")
         
-        resultados = buscar_itens_na_loja(driver, ITENS_MONITORAR)
+        # NOVA ESTRATÉGIA EM 2 PASSOS:
+        # 1. Lista TODOS os itens da loja
+        itens_loja = listar_todos_itens_da_loja(driver)
+        
+        # Salva lista completa para referência
+        salvar_lista_loja(itens_loja)
+        
+        # 2. Busca os itens monitorados na lista
+        resultados = buscar_itens_monitorados(itens_loja, ITENS_MONITORAR)
         
         imprimir_resultados(resultados)
         imprimir_resumo(resultados)
@@ -953,10 +860,9 @@ def main():
         print("✅ Monitoramento concluído!")
         
     except Exception as e:
-        print(f"❌ Erro durante a execução: {str(e)}")
+        print(f"❌ Erro: {str(e)}")
         import traceback
         traceback.print_exc()
-        
         salvar_screenshot(driver, "fortnite_erro.png")
     
     finally:
