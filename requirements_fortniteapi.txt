@@ -7,3 +7,6 @@ requests>=2.31.0
 
 # Utilitários
 python-dotenv>=1.0.0
+
+# Timezone support (para ZoneInfo)
+tzdata>=2023.3; sys_platform == 'win32'
