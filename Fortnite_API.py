@@ -7,6 +7,7 @@ import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
 import time
 import re
 from datetime import datetime
@@ -17,6 +18,7 @@ from email.message import EmailMessage
 import os
 import unicodedata
 from difflib import SequenceMatcher
+import requests
 
 # ========================================
 # CONFIGURAÇÕES
@@ -48,7 +50,14 @@ EMAIL_REMETENTE = os.getenv('EMAIL_APP_P')
 SENHA_APP = os.getenv('SENHA_APP_P')
 DESTINATARIOS = [EMAIL_REMETENTE]
 
+# Configuração do Telegram
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+
 FORTNITE_SHOP_URL = "https://www.fortnite.com/item-shop?lang=pt-BR"
+
+# NOVO: Dicionário global para armazenar XPaths dos cards
+CACHE_XPATHS = {}
 
 # ========================================
 # FUNÇÕES AUXILIARES
@@ -125,6 +134,34 @@ def e_match_valido(item_busca, item_loja):
         return True, sim_score, "similaridade_alta"
     
     return False, 0.0, "nao_match"
+
+def gerar_xpath_elemento(driver, element):
+    """
+    Gera um XPath único para o elemento
+    """
+    try:
+        xpath = driver.execute_script("""
+            function getPathTo(element) {
+                if (element.id !== '')
+                    return '//*[@id="' + element.id + '"]';
+                if (element === document.body)
+                    return '/html/body';
+
+                var ix = 0;
+                var siblings = element.parentNode.childNodes;
+                for (var i = 0; i < siblings.length; i++) {
+                    var sibling = siblings[i];
+                    if (sibling === element)
+                        return getPathTo(element.parentNode) + '/' + element.tagName.toLowerCase() + '[' + (ix + 1) + ']';
+                    if (sibling.nodeType === 1 && sibling.tagName === element.tagName)
+                        ix++;
+                }
+            }
+            return getPathTo(arguments[0]);
+        """, element)
+        return xpath
+    except:
+        return None
 
 def encontrar_card_correto(driver, elemento_titulo, nome_item):
     """Sobe na hierarquia DOM até encontrar o card completo com preço"""
@@ -210,6 +247,225 @@ def extrair_preco_do_card(driver, card_element, nome_item):
         pass
     
     return None
+
+def extrair_disponibilidade_item(driver, nome_item, xpath_card=None):
+    """
+    Usa o XPath armazenado (se disponível) ou busca o item novamente
+    Clica no card e extrai a informação de disponibilidade
+    """
+    try:
+        print("      🔍 Extraindo disponibilidade...")
+        
+        card_element = None
+        
+        # Tenta usar o XPath do cache primeiro
+        if xpath_card and xpath_card in CACHE_XPATHS:
+            try:
+                print(f"      📍 Usando XPath do cache: {CACHE_XPATHS[xpath_card][:80]}...")
+                card_element = driver.find_element(By.XPATH, CACHE_XPATHS[xpath_card])
+                print("      ✅ Card encontrado via cache")
+            except Exception as e:
+                print(f"      ⚠️ Cache falhou: {e}")
+                card_element = None
+        
+        # Se não encontrou via cache, busca novamente
+        if not card_element:
+            print("      🔍 Buscando elemento novamente...")
+            elementos_titulo = driver.find_elements(By.CSS_SELECTOR, '[data-testid="item-title"]')
+            
+            for elemento in elementos_titulo:
+                try:
+                    texto_elemento = elemento.text.strip()
+                    if normalizar_texto(texto_elemento) == normalizar_texto(nome_item):
+                        card_element = encontrar_card_correto(driver, elemento, nome_item)
+                        print(f"      ✅ Card encontrado por busca: {texto_elemento}")
+                        break
+                except:
+                    continue
+        
+        if not card_element:
+            print(f"      ❌ Card não encontrado para: {nome_item}")
+            return "Disponibilidade não informada"
+        
+        # Scroll até o elemento
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", card_element)
+        time.sleep(1.5)
+        
+        # Clica no card
+        print("      🖱️ Clicando no card...")
+        driver.execute_script("arguments[0].click();", card_element)
+        time.sleep(3)  # Aumentado para 3 segundos
+        
+        # Aguarda o modal carregar completamente
+        print("      ⏳ Aguardando modal carregar...")
+        time.sleep(2)
+        
+        disponibilidade = None
+        
+        # Estratégia 1: XPath direto com a classe específica
+        print("      🔍 Estratégia 1: XPath com classe específica...")
+        try:
+            xpath_queries = [
+                "//span[@class='font-heading-now-regular text-2xs']",
+                "//span[contains(@class, 'font-heading-now-regular') and contains(@class, 'text-2xs')]",
+                "//span[contains(@class, 'text-2xs')]"
+            ]
+            
+            for xpath in xpath_queries:
+                elements = driver.find_elements(By.XPATH, xpath)
+                print(f"         Encontrados {len(elements)} elementos para xpath: {xpath[:50]}...")
+                for element in elements:
+                    try:
+                        texto = element.text.strip()
+                        if texto and 'ficará à venda até' in texto.lower():
+                            disponibilidade = texto
+                            print(f"         ✅ Encontrado: {texto[:80]}...")
+                            break
+                    except:
+                        continue
+                if disponibilidade:
+                    break
+        except Exception as e:
+            print(f"      ⚠️ Estratégia 1 falhou: {e}")
+        
+        # Estratégia 2: Busca por texto no body inteiro
+        if not disponibilidade:
+            print("      🔍 Estratégia 2: Regex no body...")
+            try:
+                page_text = driver.find_element(By.TAG_NAME, "body").text
+                # Procura por múltiplos padrões
+                patterns = [
+                    r'O item ficará à venda até[^(]+\([^)]+\)',
+                    r'ficará à venda até[^(]+\([^)]+\)',
+                    r'venda até[^(]+\([^)]+\)'
+                ]
+                
+                for pattern in patterns:
+                    match = re.search(pattern, page_text, re.IGNORECASE)
+                    if match:
+                        disponibilidade = match.group(0)
+                        print(f"         ✅ Encontrado: {disponibilidade[:80]}...")
+                        break
+            except Exception as e:
+                print(f"      ⚠️ Estratégia 2 falhou: {e}")
+        
+        # Estratégia 3: Busca em todos os spans visíveis
+        if not disponibilidade:
+            print("      🔍 Estratégia 3: Todos os spans...")
+            try:
+                all_spans = driver.find_elements(By.TAG_NAME, "span")
+                print(f"         Analisando {len(all_spans)} spans...")
+                for span in all_spans:
+                    try:
+                        texto = span.text.strip()
+                        if texto and len(texto) > 30 and 'ficará à venda até' in texto.lower():
+                            disponibilidade = texto
+                            print(f"         ✅ Encontrado: {texto[:80]}...")
+                            break
+                    except:
+                        continue
+            except Exception as e:
+                print(f"      ⚠️ Estratégia 3 falhou: {e}")
+        
+        # Estratégia 4: Busca no elemento modal/popup
+        if not disponibilidade:
+            print("      🔍 Estratégia 4: Elemento modal...")
+            try:
+                # Tenta encontrar o container do modal
+                modal_selectors = [
+                    '[role="dialog"]',
+                    '[class*="modal"]',
+                    '[class*="popup"]',
+                    'div[class*="backdrop-blur"]'
+                ]
+                
+                for selector in modal_selectors:
+                    modals = driver.find_elements(By.CSS_SELECTOR, selector)
+                    print(f"         Encontrados {len(modals)} modais para: {selector}")
+                    for modal in modals:
+                        try:
+                            texto_modal = modal.text
+                            if 'ficará à venda até' in texto_modal.lower():
+                                # Extrai apenas a linha relevante
+                                linhas = texto_modal.split('\n')
+                                for linha in linhas:
+                                    if 'ficará à venda até' in linha.lower():
+                                        disponibilidade = linha.strip()
+                                        print(f"         ✅ Encontrado no modal: {disponibilidade[:80]}...")
+                                        break
+                        except:
+                            continue
+                    if disponibilidade:
+                        break
+            except Exception as e:
+                print(f"      ⚠️ Estratégia 4 falhou: {e}")
+        
+        # Debug: Salva screenshot do modal
+        if not disponibilidade:
+            try:
+                timestamp = int(time.time())
+                screenshot_path = f"modal_debug_{normalizar_texto(nome_item).replace(' ', '_')}_{timestamp}.png"
+                driver.save_screenshot(screenshot_path)
+                print(f"      📸 Screenshot do modal salvo: {screenshot_path}")
+                
+                # Salva também o HTML do body
+                html_path = f"modal_debug_{normalizar_texto(nome_item).replace(' ', '_')}_{timestamp}.html"
+                with open(html_path, 'w', encoding='utf-8') as f:
+                    f.write(driver.page_source)
+                print(f"      💾 HTML salvo: {html_path}")
+            except:
+                pass
+        
+        # Fecha o modal
+        print("      🚪 Fechando modal...")
+        try:
+            driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+            time.sleep(1)
+            print("      ✅ Modal fechado com ESC")
+        except Exception as e:
+            print(f"      ⚠️ ESC falhou: {e}")
+            try:
+                close_buttons = driver.find_elements(By.XPATH, "//button[contains(@aria-label, 'close') or contains(@aria-label, 'fechar') or contains(@aria-label, 'Close')]")
+                if close_buttons:
+                    close_buttons[0].click()
+                    time.sleep(1)
+                    print("      ✅ Modal fechado com botão")
+            except:
+                pass
+        
+        # SEMPRE retorna à página inicial após extrair disponibilidade
+        print("      🔄 Retornando à página inicial...")
+        try:
+            driver.get(FORTNITE_SHOP_URL)
+            time.sleep(3)
+            fazer_scroll_completo(driver)
+            print("      ✅ Página inicial recarregada")
+        except Exception as e:
+            print(f"      ⚠️ Erro ao recarregar página: {e}")
+        
+        if disponibilidade:
+            disponibilidade = ' '.join(disponibilidade.split())
+            print(f"      ✅ Disponibilidade extraída: {disponibilidade}")
+            return disponibilidade
+        else:
+            print("      ❌ Disponibilidade NÃO encontrada em nenhuma estratégia")
+            return "Disponibilidade não informada"
+            
+    except Exception as e:
+        print(f"      ❌ Erro geral ao extrair disponibilidade: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # SEMPRE garante retorno à página principal em caso de erro
+        try:
+            print("      🔄 Retornando à página principal após erro...")
+            driver.get(FORTNITE_SHOP_URL)
+            time.sleep(3)
+            fazer_scroll_completo(driver)
+            print("      ✅ Página inicial recarregada após erro")
+        except:
+            pass
+        return "Disponibilidade não informada"
 
 def inicializar_driver_antidetect():
     print("🔧 Configurando navegador anti-detecção...")
@@ -315,7 +571,7 @@ def fazer_scroll_completo(driver):
 def listar_todos_itens_da_loja(driver):
     """
     PASSO 1: Lista TODOS os itens disponíveis na loja
-    Retorna: lista de dicionários com {nome, elemento, card}
+    Retorna: lista de dicionários com {nome, elemento, card, xpath}
     """
     print("\n📋 PASSO 1: Listando TODOS os itens da loja...")
     
@@ -325,7 +581,6 @@ def listar_todos_itens_da_loja(driver):
     elementos_processados = set()
     
     try:
-        # Usa apenas o seletor principal que sabemos que funciona
         elementos_titulo = driver.find_elements(By.CSS_SELECTOR, '[data-testid="item-title"]')
         
         print(f"   📄 Encontrados {len(elementos_titulo)} elementos de título\n")
@@ -337,7 +592,6 @@ def listar_todos_itens_da_loja(driver):
                 if not nome or len(nome) < 2:
                     continue
                 
-                # Evita duplicatas
                 nome_norm = normalizar_texto(nome)
                 if nome_norm in elementos_processados:
                     continue
@@ -348,12 +602,19 @@ def listar_todos_itens_da_loja(driver):
                 card = encontrar_card_correto(driver, elemento, nome)
                 preco = extrair_preco_do_card(driver, card, nome)
                 
+                # NOVO: Gera e armazena o XPath do card
+                xpath = gerar_xpath_elemento(driver, card)
+                if xpath:
+                    CACHE_XPATHS[nome_norm] = xpath
+                    print(f"   📍 XPath salvo para '{nome}': {xpath[:80]}...")
+                
                 itens_encontrados.append({
                     'nome': nome,
                     'nome_normalizado': nome_norm,
                     'elemento': elemento,
                     'card': card,
-                    'preco': preco
+                    'preco': preco,
+                    'xpath': xpath  # NOVO CAMPO
                 })
                 
                 preco_str = f"{preco} V-Bucks" if preco else "sem preço"
@@ -362,17 +623,18 @@ def listar_todos_itens_da_loja(driver):
             except Exception as e:
                 continue
         
-        print(f"\n   ✅ Total de {len(itens_encontrados)} itens únicos na loja\n")
+        print(f"\n   ✅ Total de {len(itens_encontrados)} itens únicos na loja")
+        print(f"   💾 {len(CACHE_XPATHS)} XPaths armazenados em cache\n")
         
     except Exception as e:
         print(f"   ❌ Erro ao listar itens: {e}\n")
     
     return itens_encontrados
 
-def buscar_itens_monitorados(itens_loja, itens_procurados):
+def buscar_itens_monitorados(driver, itens_loja, itens_procurados):
     """
     PASSO 2: Busca os itens monitorados na lista da loja
-    Usa matching inteligente para evitar falsos positivos
+    Usa matching inteligente e extrai disponibilidade
     """
     print("🔍 PASSO 2: Buscando itens monitorados na lista...\n")
     
@@ -397,6 +659,14 @@ def buscar_itens_monitorados(itens_loja, itens_procurados):
             print(f"      Score: {melhor_score:.0%} | Tipo: {melhor_tipo}")
             if melhor_match['preco']:
                 print(f"      Preço: {melhor_match['preco']} V-Bucks")
+            
+            # Extrai disponibilidade usando o XPath armazenado
+            disponibilidade = extrair_disponibilidade_item(
+                driver, 
+                melhor_match['nome'],
+                melhor_match.get('xpath')
+            )
+            
             print()
             
             resultados.append({
@@ -406,16 +676,17 @@ def buscar_itens_monitorados(itens_loja, itens_procurados):
                 'preco_num': melhor_match['preco'],
                 'nome_completo': melhor_match['nome'],
                 'score': melhor_score,
-                'tipo_match': melhor_tipo
+                'tipo_match': melhor_tipo,
+                'disponibilidade': disponibilidade,
+                'xpath': melhor_match.get('xpath')  # NOVO
             })
         else:
             print(f"   ❌ '{item_busca}' não encontrado")
             
-            # Mostra itens similares (pode ajudar a debugar)
             similares = []
             for item_loja in itens_loja:
                 sim = similaridade_strings(item_busca, item_loja['nome'])
-                if sim >= 0.4:  # 40% de similaridade
+                if sim >= 0.4:
                     similares.append((item_loja['nome'], sim))
             
             if similares:
@@ -432,7 +703,9 @@ def buscar_itens_monitorados(itens_loja, itens_procurados):
                 'preco_num': None,
                 'nome_completo': '',
                 'score': 0.0,
-                'tipo_match': None
+                'tipo_match': None,
+                'disponibilidade': None,
+                'xpath': None
             })
     
     return resultados
@@ -449,17 +722,71 @@ def salvar_lista_loja(itens_loja, arquivo='loja_fortnite_completa.txt'):
             for i, item in enumerate(itens_loja, 1):
                 preco_str = f"{item['preco']} V-Bucks" if item['preco'] else "Sem preço"
                 f.write(f"{i}. {item['nome']} - {preco_str}\n")
+                if item.get('xpath'):
+                    f.write(f"   XPath: {item['xpath']}\n")
         
         print(f"   💾 Lista completa salva em: {arquivo}\n")
     except Exception as e:
         print(f"   ⚠️ Erro ao salvar lista: {e}\n")
 
 # ========================================
+# TELEGRAM
+# ========================================
+
+def enviar_telegram(resultados, agora):
+    """Envia notificação via Telegram APENAS para produtos disponíveis"""
+    try:
+        itens_disponiveis = [r for r in resultados if r['encontrado']]
+        
+        if not itens_disponiveis:
+            print("ℹ️ Nenhum produto disponível encontrado. Notificação do Telegram cancelada.")
+            return False
+        
+        mensagem = f"🛒 <b>ITENS DISPONÍVEIS - FORTNITE</b>\n"
+        mensagem += f"📅 <i>{agora}</i>\n"
+        mensagem += "━━━━━━━━━━━━━━━\n\n"
+        
+        for i, item in enumerate(itens_disponiveis, 1):
+            nome = item['nome_completo'] if item['nome_completo'] else item['nome']
+            nome = nome[:50] + "..." if len(nome) > 50 else nome
+            preco_texto = item['preco']
+            disponibilidade = item.get('disponibilidade', 'Disponibilidade não informada')
+            
+            mensagem += f"<b>{i}. {nome}</b>\n"
+            mensagem += f"💰 Preço: <b>{preco_texto}</b>\n"
+            mensagem += f"⏰ {disponibilidade}\n"
+            mensagem += f'<a href="{FORTNITE_SHOP_URL}">🛒 Ver na Loja</a>\n\n'
+        
+        mensagem += "━━━━━━━━━━━━━━━\n"
+        mensagem += f"<i>✅ {len(itens_disponiveis)} itens encontrados</i>"
+        
+        url_api = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        payload = {
+            'chat_id': TELEGRAM_CHAT_ID,
+            'text': mensagem,
+            'parse_mode': 'HTML',
+            'disable_web_page_preview': True
+        }
+        
+        response = requests.post(url_api, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            print(f"✅ Telegram: {len(itens_disponiveis)} itens disponíveis enviados!")
+            return True
+        else:
+            print(f"❌ Erro ao enviar Telegram: {response.text}")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Erro na função enviar_telegram: {str(e)}")
+        return False
+
+# ========================================
 # EMAIL, DISPLAY E MAIN
 # ========================================
 
 def criar_html_email(resultados, agora):
-    """Cria HTML do email - versão simplificada"""
+    """Cria HTML do email"""
     
     encontrados = sum(1 for r in resultados if r['encontrado'])
     nao_encontrados = len(resultados) - encontrados
@@ -595,6 +922,16 @@ def criar_html_email(resultados, agora):
                 font-size: 14px;
             }}
             
+            .item-disponibilidade {{
+                color: #FFD700;
+                font-size: 13px;
+                margin-top: 8px;
+                padding: 8px;
+                background: rgba(255, 215, 0, 0.1);
+                border-radius: 8px;
+                border-left: 3px solid #FFD700;
+            }}
+            
             .item-bottom {{
                 display: flex;
                 justify-content: space-between;
@@ -703,6 +1040,7 @@ def criar_html_email(resultados, agora):
         encontrado = item['encontrado']
         nome_completo = item.get('nome_completo', '')
         preco_num = item.get('preco_num')
+        disponibilidade = item.get('disponibilidade', '')
         
         cor = "verde" if encontrado else "vermelho"
         status_icon = "✓" if encontrado else "✗"
@@ -718,10 +1056,16 @@ def criar_html_email(resultados, agora):
                         <div class="item-texto">
                             <div class="item-nome">{display_name}</div>
                             <div class="item-sub">{subtitle}</div>
+        """
+        
+        if disponibilidade and disponibilidade != "Disponibilidade não informada":
+            html += f'<div class="item-disponibilidade">⏰ {disponibilidade}</div>'
+        
+        html += """
                         </div>
                     </div>
                     <div class="item-bottom">
-                        <span class="badge {cor}">{status_icon} {status_text}</span>
+                        <span class="badge """ + cor + """">""" + status_icon + """ """ + status_text + """</span>
         """
         
         if encontrado and preco_num:
@@ -741,7 +1085,7 @@ def criar_html_email(resultados, agora):
             
             <div class="footer">
                 <p><strong>Monitor Automático da Loja Fortnite</strong></p>
-                <p>© 2025 | Sistema de Matching Inteligente</p>
+                <p>© 2025 | Sistema de Matching Inteligente + Cache XPath</p>
             </div>
         </div>
     </body>
@@ -784,7 +1128,7 @@ def salvar_screenshot(driver, nome="fortnite_loja.png"):
 
 def imprimir_cabecalho(agora):
     print("\n" + "="*100)
-    print("🎮 MONITOR FORTNITE - VERSÃO ULTRA (Lista Completa + Matching Inteligente)".center(100))
+    print("🎮 MONITOR FORTNITE - VERSÃO ULTRA (Cache XPath + Debug Avançado)".center(100))
     print("="*100)
     print(f"⏰ Verificação iniciada em: {agora}")
     print(f"🔍 Itens monitorados: {len(ITENS_MONITORAR)}")
@@ -800,6 +1144,7 @@ def imprimir_resultados(resultados):
         encontrado = item['encontrado']
         preco = item['preco']
         nome_completo = item.get('nome_completo', '')
+        disponibilidade = item.get('disponibilidade', '')
         
         print(f"[{i}/{len(resultados)}] {nome}")
         
@@ -808,6 +1153,8 @@ def imprimir_resultados(resultados):
             if nome_completo and nome_completo != nome:
                 print(f"      Nome na loja: {nome_completo}")
             print(f"      Preço: 💰 {preco}")
+            if disponibilidade and disponibilidade != "Disponibilidade não informada":
+                print(f"      ⏰ {disponibilidade}")
         else:
             print(f"      ❌ Não encontrado")
         
@@ -823,6 +1170,7 @@ def imprimir_resumo(resultados):
     print(f"✅ Encontrados: {encontrados}")
     print(f"❌ Não encontrados: {nao_encontrados}")
     print(f"📋 Total: {len(resultados)}")
+    print(f"💾 XPaths em cache: {len(CACHE_XPATHS)}")
     print("="*100 + "\n")
 
 def main():
@@ -842,20 +1190,21 @@ def main():
         
         salvar_screenshot(driver, "fortnite_loja.png")
         
-        # NOVA ESTRATÉGIA EM 2 PASSOS:
-        # 1. Lista TODOS os itens da loja
+        # 1. Lista TODOS os itens da loja (com XPath)
         itens_loja = listar_todos_itens_da_loja(driver)
         
-        # Salva lista completa para referência
+        # Salva lista completa
         salvar_lista_loja(itens_loja)
         
-        # 2. Busca os itens monitorados na lista
-        resultados = buscar_itens_monitorados(itens_loja, ITENS_MONITORAR)
+        # 2. Busca os itens monitorados e extrai disponibilidade
+        resultados = buscar_itens_monitorados(driver, itens_loja, ITENS_MONITORAR)
         
         imprimir_resultados(resultados)
         imprimir_resumo(resultados)
         
+        # Envio de notificações
         enviar_email(resultados, agora)
+        enviar_telegram(resultados, agora)
         
         print("✅ Monitoramento concluído!")
         
