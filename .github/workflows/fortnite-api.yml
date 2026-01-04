@@ -1,5 +1,4 @@
-name: Fortnite
-
+name: Fortnite Monitor
 on:
   schedule:
     # 10:00 horário de Brasília = 13:00 UTC (Brasília está UTC-3)
@@ -9,6 +8,7 @@ on:
 jobs:
   verificar-loja-api:
     runs-on: ubuntu-latest
+    name: Verificar Loja (Fortnite API)
     
     steps:
       - name: Checkout do código
@@ -29,6 +29,8 @@ jobs:
           EMAIL_APP_P: ${{ secrets.EMAIL_APP_P }}
           SENHA_APP_P: ${{ secrets.SENHA_APP_P }}
           FORTNITE_API_KEY: ${{ secrets.FORTNITE_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python Fortnite_API.py
       
       - name: Upload de logs (em caso de erro)
@@ -39,4 +41,53 @@ jobs:
           path: |
             *.log
             *.txt
+          retention-days: 7
+
+  verificar-loja-selenium:
+    runs-on: ubuntu-latest
+    name: Verificar Loja (Selenium Monitor)
+    
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+      
+      - name: Instalar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Instalar Chrome e ChromeDriver
+        run: |
+          # Instalar Chrome
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+          
+          # Verificar versão instalada
+          google-chrome --version
+      
+      - name: Instalar dependências Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Rodar verificação da loja (Selenium)
+        env:
+          EMAIL_APP_P: ${{ secrets.EMAIL_APP_P }}
+          SENHA_APP_P: ${{ secrets.SENHA_APP_P }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python fortnite_monitor.py
+      
+      - name: Upload de screenshots e logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selenium-outputs
+          path: |
+            *.png
+            *.log
+            *.txt
+            *.html
           retention-days: 7
