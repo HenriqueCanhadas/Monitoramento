@@ -20,8 +20,8 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 
 # Email
-EMAIL_REMETENTE = os.environ.get('EMAIL_REMETENTE')
-SENHA_APP = os.environ.get('SENHA_APP')
+EMAIL_REMETENTE = os.environ.get('EMAIL_APP_P')
+SENHA_APP = os.environ.get('SENHA_APP_P')
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
