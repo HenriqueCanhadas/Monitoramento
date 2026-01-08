@@ -136,6 +136,16 @@ PRODUTOS = [
 ]
 
 # ========================================
+# CONFIGURAÇÕES DE FILTRO TELEGRAM
+# ========================================
+
+# Lista de produtos para NÃO enviar no Telegram (blacklist)
+# Útil para produtos que você não quer mais monitorar via Telegram
+NAO_ENVIAR_TELEGRAM = [
+    "kabum-6",  # Exemplo: descomentar para ignorar este produto
+]
+
+# ========================================
 # FUNÇÕES AUXILIARES
 # ========================================
 
@@ -223,6 +233,21 @@ def obter_menor_preco_historico(product_key):
     except Exception as e:
         print(f"⚠️ Erro ao buscar menor preço para {product_key}: {str(e)}")
         return None
+
+def produto_passa_filtros_telegram(produto):
+    """
+    Verifica se um produto deve ser enviado no Telegram baseado nos filtros configurados.
+    
+    Retorna: (bool, str) - (deve_enviar, motivo_bloqueio)
+    """
+    product_key = produto.get('product_key')
+    
+    # Filtro: Blacklist
+    if product_key in NAO_ENVIAR_TELEGRAM:
+        return False, f"🚫 Produto na blacklist"
+    
+    # Se passou no filtro, pode enviar
+    return True, "✅ Aprovado"
 
 # ========================================
 # FUNÇÕES DE SCRAPING
@@ -783,7 +808,8 @@ def criar_mensagem_telegram_filtrada(produtos_filtrados, agora):
         
         if menor:
             mensagem += f"🏆 Histórico: {formatar_preco_brasileiro(menor)}\n"
-            if extrair_valor_numerico(status) < menor:
+            preco_atual = extrair_valor_numerico(status)
+            if preco_atual < menor:
                 mensagem += "🚀 <i>PREÇO MAIS BAIXO DA HISTÓRIA!</i>\n"
         
         mensagem += f'<a href="{url}">🛒 Comprar Agora</a>\n\n'
@@ -793,30 +819,42 @@ def criar_mensagem_telegram_filtrada(produtos_filtrados, agora):
     return mensagem
 
 def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
-    """Envia notificação via Telegram apenas se o preço for menor ou igual ao histórico"""
+    """
+    Envia notificação via Telegram com sistema de filtros inteligente.
+    Aplica múltiplos critérios para enviar apenas ofertas relevantes.
+    """
     try:
-        # 1. Filtrar apenas produtos que estão com preço IGUAL ou MENOR que o histórico
-        # E que estejam disponíveis
-        ofertas_relevantes = []
+        ofertas_aprovadas = []
+        produtos_bloqueados = []
         
+        # Filtra produtos usando a nova função de filtros
         for p in produtos_info:
             if p['tipo'] == 'disponivel':
-                preco_atual = extrair_valor_numerico(p['status'])
-                menor_historico = p.get('menor_preco')
-
-                # Se não houver histórico (None), consideramos relevante para registrar o primeiro
-                # Se houver, comparamos: preco_atual <= menor_historico
-                if menor_historico is None or preco_atual <= menor_historico:
-                    ofertas_relevantes.append(p)
-
-        # 2. Se não houver nenhuma oferta "matadora", não envia nada para não poluir o grupo
-        if not ofertas_relevantes:
-            print("ℹ️ Nenhuma oferta com preço menor ou igual ao histórico encontrada. Telegram não enviado.")
+                deve_enviar, motivo = produto_passa_filtros_telegram(p)
+                
+                if deve_enviar:
+                    ofertas_aprovadas.append(p)
+                else:
+                    produtos_bloqueados.append({
+                        'nome': p['nome'][:40],
+                        'motivo': motivo
+                    })
+        
+        # Log de produtos bloqueados
+        if produtos_bloqueados:
+            print("\n🚫 Produtos BLOQUEADOS do Telegram:")
+            for item in produtos_bloqueados:
+                print(f"   • {item['nome']}: {item['motivo']}")
+        
+        # Se não houver ofertas aprovadas, não envia
+        if not ofertas_aprovadas:
+            print("\nℹ️ Nenhuma oferta passou nos filtros configurados. Telegram não enviado.")
+            print(f"   Filtros ativos:")
+            print(f"   - Blacklist: {len(NAO_ENVIAR_TELEGRAM)} produtos bloqueados")
             return False
-
-        # 3. Criar a mensagem apenas com os itens filtrados
-        # Podemos reutilizar sua lógica de criar_mensagem_telegram, mas passando a lista filtrada
-        mensagem = criar_mensagem_telegram_filtrada(ofertas_relevantes, agora)
+        
+        # Criar mensagem apenas com ofertas aprovadas
+        mensagem = criar_mensagem_telegram_filtrada(ofertas_aprovadas, agora)
         
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         payload = {
@@ -829,7 +867,8 @@ def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
         response = requests.post(url, json=payload, timeout=30)
         
         if response.status_code == 200:
-            print(f"✅ Notificação de {len(ofertas_relevantes)} oferta(s) enviada ao Telegram!")
+            print(f"\n✅ Notificação de {len(ofertas_aprovadas)} oferta(s) aprovada(s) enviada ao Telegram!")
+            print(f"   ({len(produtos_bloqueados)} produto(s) bloqueado(s) pelos filtros)")
             return True
         else:
             print(f"❌ Erro ao enviar Telegram: {response.status_code}")
@@ -852,6 +891,8 @@ def imprimir_cabecalho(agora):
     print(f"📧 Email: {EMAIL_REMETENTE}")
     print(f"📱 Telegram: Chat ID {TELEGRAM_CHAT_ID}")
     print(f"🌐 Ambiente: {'CI/CD' if os.environ.get('CI') else 'Local'}")
+    print("\n🎯 FILTROS TELEGRAM ATIVOS:")
+    print(f"   • Blacklist: {len(NAO_ENVIAR_TELEGRAM)} produto(s)")
     print("="*120 + "\n")
 
 def imprimir_resultado(index, total, produto, status, preco_estimado, menor_preco, url):
