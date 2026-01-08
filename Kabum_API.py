@@ -142,7 +142,7 @@ PRODUTOS = [
 # Lista de produtos para NÃO enviar no Telegram (blacklist)
 # Útil para produtos que você não quer mais monitorar via Telegram
 NAO_ENVIAR_TELEGRAM = [
-    # "kabum-6",  # Exemplo: descomentar para ignorar este produto
+    "kabum-6",  # Exemplo: descomentar para ignorar este produto
 ]
 
 # ========================================
