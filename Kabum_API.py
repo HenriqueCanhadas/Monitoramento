@@ -47,6 +47,7 @@ except Exception as e:
 DESTINATARIOS = [EMAIL_REMETENTE]
 
 # Produtos a monitorar (LISTA COMPLETA - 14 produtos)
+# Produtos a monitorar (LISTA COMPLETA - 14 produtos)
 PRODUTOS = [
     {
         "product_key": "kabum-1",
@@ -132,6 +133,36 @@ PRODUTOS = [
         "product_key": "kabum-14",
         "url": "https://www.kabum.com.br/produto/728161/cartao-de-memoria-sandisk-creator-series-microsd-512gb-classe-10-leitura-190-mb-s-e-gravacao-130-mb-s-sdsqxav-512g-gn6ms",
         "preco_estimado": 330.00
+    },
+    {
+        "product_key": "kabum-18",
+        "url": "https://www.kabum.com.br/produto/536958/leitor-de-disco-para-playstation-5-slim-ps5-pro-sony-edicao-digital-branco-cfi-2000-slim",
+        "preco_estimado": 330.00
+    },
+    {
+        "product_key": "kabum-19",
+        "url": "https://www.kabum.com.br/produto/536958/leitor-de-disco-para-playstation-5-slim-ps5-pro-sony-edicao-digital-branco-cfi-2000-slim",
+        "preco_estimado": 449.90
+    },
+    {
+        "product_key": "kabum-20",
+        "url": "https://www.kabum.com.br/produto/442198/pen-drive-256gb-kingston-datatraveler-exodia-onyx-usb-3-2-preto-dtxon-256gb",
+        "preco_estimado": 99.99
+    },
+    {
+        "product_key": "kabum-21",
+        "url": "https://www.kabum.com.br/produto/498044/gabinete-jonsbo-d31-mesh-screen-matx-com-tela-lcd-aluminio-preto",
+        "preco_estimado": 1.300.00
+    },
+    {
+        "product_key": "kabum-22",
+        "url": "https://www.kabum.com.br/produto/495500/mouse-sem-fio-logitech-pebble-2-m350s-usb-logi-bolt-ou-bluetooth-e-pilha-inclusa-com-clique-silencioso-grafite-910-007049",
+        "preco_estimado": 79.99
+    },
+    {
+        "product_key": "kabum-23",
+        "url": "https://www.kabum.com.br/produto/495497/teclado-sem-fio-logitech-bluetooth-e-usb-pebble-keys-2-k380s-easy-switch-e-pilha-inclusa-grafite-920-011789",
+        "preco_estimado": 169.90
     },
 ]
 
