@@ -46,8 +46,7 @@ except Exception as e:
 # Destinatários (usa o mesmo email do remetente)
 DESTINATARIOS = [EMAIL_REMETENTE]
 
-# Produtos a monitorar (LISTA COMPLETA - 14 produtos)
-# Produtos a monitorar (LISTA COMPLETA - 14 produtos)
+# Produtos a monitorar (LISTA COMPLETA - 23 produtos)
 PRODUTOS = [
     {
         "product_key": "kabum-1",
@@ -842,31 +841,50 @@ def enviar_email(produtos_info, disponiveis, esgotados, erros, agora):
 def criar_mensagem_telegram_filtrada(produtos_filtrados, agora):
     """Cria mensagem focada apenas em promoções detectadas"""
     
+    # Cabeçalho
     mensagem = f"🔥 <b>OFERTA DETECTADA - KABUM!</b>\n"
-    mensagem += f"📅 <i>{agora}</i>\n"
-    mensagem += "━━━━━━━━━━━━━━━\n\n"
+    mensagem += f"📅 {agora}\n"
+    mensagem += f"🎯 <b>{len(produtos_filtrados)}</b> {'produto' if len(produtos_filtrados) == 1 else 'produtos'} em oferta\n"
+    mensagem += "━━━━━━━━━━━━━━━━━━━━\n\n"
     
     for i, produto in enumerate(produtos_filtrados, 1):
-        nome = produto['nome'][:50]
+        nome = produto['nome'][:60]  # Aumentado de 50 para 60
         status = produto['status']
         url = produto['url']
         preco_estimado = produto.get('preco_estimado')
+        product_key = produto.get('product_key')
         
-        mensagem += f"<b>{i}. {nome}</b>\n"
-        mensagem += f"💰 <b>Preço Atual: {status}</b>\n"
+        # Emoji de número
+        numeros_emoji = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+        emoji_num = numeros_emoji[i-1] if i <= 10 else f"{i}."
+        
+        # Verifica se é produto da whitelist
+        badge_whitelist = " ⭐" if product_key in ENVIAR_TELEGRAM else ""
+        
+        mensagem += f"{emoji_num} <b>{nome}</b>{badge_whitelist}\n"
+        mensagem += f"┣ 💵 <b>{status}</b>\n"
         
         if preco_estimado:
-            mensagem += f"🎯 Estimado: {formatar_preco_brasileiro(preco_estimado)}\n"
+            mensagem += f"┣ 🎯 Estimado: <code>{formatar_preco_brasileiro(preco_estimado)}</code>\n"
             preco_atual = extrair_valor_numerico(status)
+            
             if preco_atual < preco_estimado:
                 economia = preco_estimado - preco_atual
                 economia_percent = (economia / preco_estimado) * 100
-                mensagem += f"🚀 <i>ECONOMIA: {formatar_preco_brasileiro(economia)} (-{economia_percent:.1f}%)</i>\n"
+                mensagem += f"┣ 💰 Economia: <b>{formatar_preco_brasileiro(economia)}</b> ({economia_percent:.1f}% OFF)\n"
+            elif preco_atual == preco_estimado:
+                mensagem += f"┣ ✅ Preço igual ao estimado\n"
+            else:
+                # Produto da whitelist com preço acima do estimado
+                diferenca = preco_atual - preco_estimado
+                mensagem += f"┣ ⚠️ Acima do estimado: +{formatar_preco_brasileiro(diferenca)}\n"
         
-        mensagem += f'<a href="{url}">🛒 Comprar Agora</a>\n\n'
+        mensagem += f"┗ 🛒 <a href='{url}'>COMPRAR AGORA</a>\n\n"
 
-    mensagem += "━━━━━━━━━━━━━━━\n"
-    mensagem += "<i>Alerta de Preço Automático</i>"
+    # Rodapé
+    mensagem += "━━━━━━━━━━━━━━━━━━━━\n"
+    mensagem += "🤖 <i>Monitoramento Automático KaBuM!</i>"
+    
     return mensagem
 
 def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
