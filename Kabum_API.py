@@ -134,11 +134,6 @@ PRODUTOS = [
         "preco_estimado": 330.00
     },
     {
-        "product_key": "kabum-18",
-        "url": "https://www.kabum.com.br/produto/536958/leitor-de-disco-para-playstation-5-slim-ps5-pro-sony-edicao-digital-branco-cfi-2000-slim",
-        "preco_estimado": 330.00
-    },
-    {
         "product_key": "kabum-19",
         "url": "https://www.kabum.com.br/produto/536958/leitor-de-disco-para-playstation-5-slim-ps5-pro-sony-edicao-digital-branco-cfi-2000-slim",
         "preco_estimado": 449.90
