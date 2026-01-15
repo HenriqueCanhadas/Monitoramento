@@ -152,7 +152,7 @@ PRODUTOS = [
     {
         "product_key": "kabum-21",
         "url": "https://www.kabum.com.br/produto/498044/gabinete-jonsbo-d31-mesh-screen-matx-com-tela-lcd-aluminio-preto",
-        "preco_estimado": 1.300.00
+        "preco_estimado": 1300.00
     },
     {
         "product_key": "kabum-22",
