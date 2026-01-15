@@ -801,16 +801,18 @@ def criar_mensagem_telegram_filtrada(produtos_filtrados, agora):
         nome = produto['nome'][:50]
         status = produto['status']
         url = produto['url']
-        menor = produto.get('menor_preco')
+        preco_estimado = produto.get('preco_estimado')
         
         mensagem += f"<b>{i}. {nome}</b>\n"
         mensagem += f"💰 <b>Preço Atual: {status}</b>\n"
         
-        if menor:
-            mensagem += f"🏆 Histórico: {formatar_preco_brasileiro(menor)}\n"
+        if preco_estimado:
+            mensagem += f"🎯 Estimado: {formatar_preco_brasileiro(preco_estimado)}\n"
             preco_atual = extrair_valor_numerico(status)
-            if preco_atual < menor:
-                mensagem += "🚀 <i>PREÇO MAIS BAIXO DA HISTÓRIA!</i>\n"
+            if preco_atual < preco_estimado:
+                economia = preco_estimado - preco_atual
+                economia_percent = (economia / preco_estimado) * 100
+                mensagem += f"🚀 <i>ECONOMIA: {formatar_preco_brasileiro(economia)} (-{economia_percent:.1f}%)</i>\n"
         
         mensagem += f'<a href="{url}">🛒 Comprar Agora</a>\n\n'
 
@@ -840,18 +842,17 @@ def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
                     })
                     continue
                 
-                # Agora verifica se o preço atual é menor ou igual ao histórico
+                # Agora verifica se o preço atual é menor ou igual ao PREÇO ESTIMADO
                 preco_atual = extrair_valor_numerico(p['status'])
-                menor_historico = p.get('menor_preco')
+                preco_estimado = p.get('preco_estimado', 0)
                 
-                # Se não houver histórico (None), consideramos relevante para registrar o primeiro
-                # Se houver, comparamos: preco_atual <= menor_historico
-                if menor_historico is None or preco_atual <= menor_historico:
+                # Compara com o preço estimado
+                if preco_atual <= preco_estimado:
                     ofertas_aprovadas.append(p)
                 else:
                     produtos_bloqueados.append({
                         'nome': p['nome'][:40],
-                        'motivo': f"💰 Preço {formatar_preco_brasileiro(preco_atual)} acima do histórico ({formatar_preco_brasileiro(menor_historico)})"
+                        'motivo': f"💰 Preço {formatar_preco_brasileiro(preco_atual)} acima do estimado ({formatar_preco_brasileiro(preco_estimado)})"
                     })
         
         # Log de produtos bloqueados
@@ -865,7 +866,7 @@ def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
             print("\nℹ️ Nenhuma oferta passou nos filtros configurados. Telegram não enviado.")
             print(f"   Filtros ativos:")
             print(f"   - Blacklist: {len(NAO_ENVIAR_TELEGRAM)} produtos bloqueados")
-            print(f"   - Apenas preços <= histórico")
+            print(f"   - Apenas preços <= estimado")
             return False
         
         # Criar mensagem apenas com ofertas aprovadas
@@ -907,7 +908,7 @@ def imprimir_cabecalho(agora):
     print(f"📱 Telegram: Chat ID {TELEGRAM_CHAT_ID}")
     print(f"🌐 Ambiente: {'CI/CD' if os.environ.get('CI') else 'Local'}")
     print("\n🎯 FILTROS TELEGRAM ATIVOS:")
-    print(f"   • Apenas preços <= histórico")
+    print(f"   • Apenas preços <= estimado")
     print(f"   • Blacklist: {len(NAO_ENVIAR_TELEGRAM)} produto(s)")
     print("="*120 + "\n")
 
