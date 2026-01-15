@@ -139,6 +139,15 @@ PRODUTOS = [
 # CONFIGURAÇÕES DE FILTRO TELEGRAM
 # ========================================
 
+# Lista de produtos para SEMPRE enviar no Telegram (whitelist prioritária)
+# Produtos nesta lista SEMPRE enviam notificação quando disponíveis, 
+# INDEPENDENTE do preço estar acima ou abaixo do estimado
+ENVIAR_TELEGRAM = [
+    "kabum-2",   # HD Seagate 4TB
+    "kabum-3",   # HD Seagate 8TB
+    "kabum-14",  # Cartão SanDisk 512GB
+]
+
 # Lista de produtos para NÃO enviar no Telegram (blacklist)
 # Útil para produtos que você não quer mais monitorar via Telegram
 NAO_ENVIAR_TELEGRAM = [
@@ -238,16 +247,25 @@ def produto_passa_filtros_telegram(produto):
     """
     Verifica se um produto deve ser enviado no Telegram baseado nos filtros configurados.
     
-    Retorna: (bool, str) - (deve_enviar, motivo_bloqueio)
+    Prioridade dos filtros:
+    1. Whitelist (ENVIAR_TELEGRAM) - sempre envia se disponível
+    2. Blacklist (NAO_ENVIAR_TELEGRAM) - nunca envia
+    
+    Retorna: (bool, str) - (deve_enviar, motivo)
     """
     product_key = produto.get('product_key')
     
-    # Filtro: Blacklist
+    # Filtro 1: Whitelist (PRIORIDADE MÁXIMA)
+    # Se está na whitelist, SEMPRE envia (ignora comparação de preço)
+    if product_key in ENVIAR_TELEGRAM:
+        return True, f"⭐ Produto na whitelist (sempre envia)"
+    
+    # Filtro 2: Blacklist
     if product_key in NAO_ENVIAR_TELEGRAM:
         return False, f"🚫 Produto na blacklist"
     
-    # Se passou no filtro, pode enviar
-    return True, "✅ Aprovado"
+    # Se não está em nenhuma lista, segue regra normal (verifica preço)
+    return None, "Aplicar regra de preço"
 
 # ========================================
 # FUNÇÕES DE SCRAPING
@@ -823,30 +841,43 @@ def criar_mensagem_telegram_filtrada(produtos_filtrados, agora):
 def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
     """
     Envia notificação via Telegram com sistema de filtros inteligente.
-    Aplica múltiplos critérios para enviar apenas ofertas relevantes.
+    
+    Lógica de filtros:
+    1. Produtos na WHITELIST (ENVIAR_TELEGRAM): sempre enviam quando disponíveis
+    2. Produtos na BLACKLIST (NAO_ENVIAR_TELEGRAM): nunca enviam
+    3. Outros produtos: só enviam se preço <= estimado
     """
     try:
         ofertas_aprovadas = []
         produtos_bloqueados = []
+        produtos_whitelist = []
         
-        # Filtra produtos usando a nova função de filtros
+        # Filtra produtos
         for p in produtos_info:
             if p['tipo'] == 'disponivel':
-                # Primeiro verifica a blacklist
-                deve_enviar, motivo = produto_passa_filtros_telegram(p)
+                product_key = p.get('product_key')
                 
-                if not deve_enviar:
+                # Verifica filtros (whitelist/blacklist)
+                resultado_filtro, motivo = produto_passa_filtros_telegram(p)
+                
+                # Caso 1: Whitelist - SEMPRE APROVA (independente do preço)
+                if resultado_filtro is True:
+                    ofertas_aprovadas.append(p)
+                    produtos_whitelist.append(p['nome'][:40])
+                    continue
+                
+                # Caso 2: Blacklist - SEMPRE BLOQUEIA
+                if resultado_filtro is False:
                     produtos_bloqueados.append({
                         'nome': p['nome'][:40],
                         'motivo': motivo
                     })
                     continue
                 
-                # Agora verifica se o preço atual é menor ou igual ao PREÇO ESTIMADO
+                # Caso 3: Produto normal - aplica regra de preço
                 preco_atual = extrair_valor_numerico(p['status'])
                 preco_estimado = p.get('preco_estimado', 0)
                 
-                # Compara com o preço estimado
                 if preco_atual <= preco_estimado:
                     ofertas_aprovadas.append(p)
                 else:
@@ -854,6 +885,12 @@ def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
                         'nome': p['nome'][:40],
                         'motivo': f"💰 Preço {formatar_preco_brasileiro(preco_atual)} acima do estimado ({formatar_preco_brasileiro(preco_estimado)})"
                     })
+        
+        # Log de produtos whitelist
+        if produtos_whitelist:
+            print("\n⭐ Produtos da WHITELIST (enviados independente do preço):")
+            for nome in produtos_whitelist:
+                print(f"   • {nome}")
         
         # Log de produtos bloqueados
         if produtos_bloqueados:
@@ -865,8 +902,9 @@ def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
         if not ofertas_aprovadas:
             print("\nℹ️ Nenhuma oferta passou nos filtros configurados. Telegram não enviado.")
             print(f"   Filtros ativos:")
-            print(f"   - Blacklist: {len(NAO_ENVIAR_TELEGRAM)} produtos bloqueados")
-            print(f"   - Apenas preços <= estimado")
+            print(f"   - Whitelist: {len(ENVIAR_TELEGRAM)} produto(s)")
+            print(f"   - Blacklist: {len(NAO_ENVIAR_TELEGRAM)} produto(s)")
+            print(f"   - Regra de preço: preço <= estimado")
             return False
         
         # Criar mensagem apenas com ofertas aprovadas
@@ -883,8 +921,10 @@ def enviar_telegram(produtos_info, disponiveis, esgotados, erros, agora):
         response = requests.post(url, json=payload, timeout=30)
         
         if response.status_code == 200:
-            print(f"\n✅ Notificação de {len(ofertas_aprovadas)} oferta(s) aprovada(s) enviada ao Telegram!")
-            print(f"   ({len(produtos_bloqueados)} produto(s) bloqueado(s) pelos filtros)")
+            print(f"\n✅ Notificação de {len(ofertas_aprovadas)} oferta(s) enviada ao Telegram!")
+            print(f"   • {len(produtos_whitelist)} da whitelist")
+            print(f"   • {len(ofertas_aprovadas) - len(produtos_whitelist)} por regra de preço")
+            print(f"   • {len(produtos_bloqueados)} bloqueado(s)")
             return True
         else:
             print(f"❌ Erro ao enviar Telegram: {response.status_code}")
@@ -908,8 +948,9 @@ def imprimir_cabecalho(agora):
     print(f"📱 Telegram: Chat ID {TELEGRAM_CHAT_ID}")
     print(f"🌐 Ambiente: {'CI/CD' if os.environ.get('CI') else 'Local'}")
     print("\n🎯 FILTROS TELEGRAM ATIVOS:")
-    print(f"   • Apenas preços <= estimado")
-    print(f"   • Blacklist: {len(NAO_ENVIAR_TELEGRAM)} produto(s)")
+    print(f"   ⭐ Whitelist: {len(ENVIAR_TELEGRAM)} produto(s) - SEMPRE envia quando disponível")
+    print(f"   🚫 Blacklist: {len(NAO_ENVIAR_TELEGRAM)} produto(s) - NUNCA envia")
+    print(f"   💰 Outros produtos: só envia se preço <= estimado")
     print("="*120 + "\n")
 
 def imprimir_resultado(index, total, produto, status, preco_estimado, menor_preco, url):
