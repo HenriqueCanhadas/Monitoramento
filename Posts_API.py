@@ -131,7 +131,7 @@ def verificar_primeiro_resultado(busca_url, texto_esperado):
 try:
     verificar_primeiro_resultado(
         busca_url="https://packsparapobres.com/?s=sailorscholar",
-        texto_esperado="Sailorscholar – Christmas Frieren & Fern"
+        texto_esperado="#Sailorscholar – Christmas Frieren & Fern"
     )
 
     verificar_primeiro_resultado(
