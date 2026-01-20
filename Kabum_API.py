@@ -843,10 +843,11 @@ def criar_mensagem_telegram_filtrada(produtos_filtrados, agora):
     mensagem += "━━━━━━━━━━━━━━━━━━━━\n\n"
     
     for i, produto in enumerate(produtos_filtrados, 1):
-        nome = produto['nome'][:60]  # Aumentado de 50 para 60
+        nome = produto['nome'][:60]
         status = produto['status']
         url = produto['url']
         preco_estimado = produto.get('preco_estimado')
+        menor_preco = produto.get('menor_preco')  # ← JÁ EXISTE NO CÓDIGO
         product_key = produto.get('product_key')
         
         # Emoji de número
@@ -859,6 +860,29 @@ def criar_mensagem_telegram_filtrada(produtos_filtrados, agora):
         mensagem += f"{emoji_num} <b>{nome}</b>{badge_whitelist}\n"
         mensagem += f"┣ 💵 <b>{status}</b>\n"
         
+        # ========================================
+        # NOVO: Exibe menor preço histórico
+        # ========================================
+        if menor_preco is not None and menor_preco > 0:
+            mensagem += f"┣ 🏆 Menor histórico: <code>{formatar_preco_brasileiro(menor_preco)}</code>\n"
+            
+            # Calcula diferença em relação ao menor preço
+            preco_atual = extrair_valor_numerico(status)
+            if preco_atual:
+                diff_menor = preco_atual - menor_preco
+                if diff_menor == 0:
+                    mensagem += f"┣ 🎉 <b>MENOR PREÇO HISTÓRICO IGUALADO!</b>\n"
+                elif diff_menor > 0:
+                    diff_percent = (diff_menor / menor_preco) * 100
+                    mensagem += f"┣ 📊 +{formatar_preco_brasileiro(diff_menor)} acima do menor ({diff_percent:.1f}%)\n"
+                else:  # diff_menor < 0 (NOVO MENOR PREÇO!)
+                    economia = abs(diff_menor)
+                    economia_percent = (economia / menor_preco) * 100
+                    mensagem += f"┣ 🚨 <b>NOVO MENOR PREÇO!</b> Economiza {formatar_preco_brasileiro(economia)} ({economia_percent:.1f}%)\n"
+        
+        # ========================================
+        # Comparação com preço estimado (já existia)
+        # ========================================
         if preco_estimado:
             mensagem += f"┣ 🎯 Estimado: <code>{formatar_preco_brasileiro(preco_estimado)}</code>\n"
             preco_atual = extrair_valor_numerico(status)
@@ -870,7 +894,6 @@ def criar_mensagem_telegram_filtrada(produtos_filtrados, agora):
             elif preco_atual == preco_estimado:
                 mensagem += f"┣ ✅ Preço igual ao estimado\n"
             else:
-                # Produto da whitelist com preço acima do estimado
                 diferenca = preco_atual - preco_estimado
                 mensagem += f"┣ ⚠️ Acima do estimado: +{formatar_preco_brasileiro(diferenca)}\n"
         
