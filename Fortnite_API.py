@@ -470,34 +470,40 @@ def extrair_disponibilidade_item(driver, nome_item, xpath_card=None):
 def inicializar_driver_antidetect():
     print("🔧 Configurando navegador anti-detecção...")
     
-    options = uc.ChromeOptions()
-    
-    options.add_argument('--disable-blink-features=AutomationControlled')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-gpu')
-    
-    user_agents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    ]
-    options.add_argument(f'--user-agent={random.choice(user_agents)}')
-    
-    options.add_argument('--headless=new')
+    # Criamos uma função interna para sempre gerar um NOVO objeto options
+    def criar_opcoes():
+        options = uc.ChromeOptions()
+        options.add_argument('--disable-blink-features=AutomationControlled')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-gpu')
+        
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+        options.add_argument(f'--user-agent={random.choice(user_agents)}')
+        options.add_argument('--headless=new')
+        return options, random.choice(user_agents)
     
     try:
         print("   🔍 Detectando versão do Chrome instalada...")
-        driver = uc.Chrome(options=options)
+        opcoes_tentativa_1, ua_1 = criar_opcoes()
+        driver = uc.Chrome(options=opcoes_tentativa_1)
+        user_agent_final = ua_1
         print("   ✅ Driver inicializado com sucesso!")
     except Exception as e:
         print(f"   ⚠️ Erro ao inicializar: {e}")
         print("   🔄 Tentando método alternativo...")
-        driver = uc.Chrome(options=options, use_subprocess=True)
+        # Chamamos a função novamente para criar um NOVO objeto
+        opcoes_tentativa_2, ua_2 = criar_opcoes()
+        driver = uc.Chrome(options=opcoes_tentativa_2, use_subprocess=True)
+        user_agent_final = ua_2
     
     try:
         driver.execute_cdp_cmd('Network.setUserAgentOverride', {
-            "userAgent": random.choice(user_agents)
+            "userAgent": user_agent_final
         })
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
     except:
