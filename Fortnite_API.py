@@ -490,15 +490,16 @@ def inicializar_driver_antidetect():
     try:
         print("   🔍 Detectando versão do Chrome instalada...")
         opcoes_tentativa_1, ua_1 = criar_opcoes()
-        driver = uc.Chrome(options=opcoes_tentativa_1)
+        # Adicionamos version_main=145 aqui
+        driver = uc.Chrome(options=opcoes_tentativa_1, version_main=145) 
         user_agent_final = ua_1
         print("   ✅ Driver inicializado com sucesso!")
     except Exception as e:
         print(f"   ⚠️ Erro ao inicializar: {e}")
         print("   🔄 Tentando método alternativo...")
-        # Chamamos a função novamente para criar um NOVO objeto
         opcoes_tentativa_2, ua_2 = criar_opcoes()
-        driver = uc.Chrome(options=opcoes_tentativa_2, use_subprocess=True)
+        # E aqui também
+        driver = uc.Chrome(options=opcoes_tentativa_2, use_subprocess=True, version_main=145)
         user_agent_final = ua_2
     
     try:
